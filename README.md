@@ -1,4 +1,4 @@
-## cron
+## micron
 
 ### _This is my cron (micron); there are others like it but this one is mine. A cron-scheduler library in Go_
 
