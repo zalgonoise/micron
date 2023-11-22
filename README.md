@@ -82,7 +82,7 @@ func main() {
 		return nil
 	}
 	
-	c, err := cron.New(cron.WithJob("my-job", "* * * * *", executor.Runnable(fn)))
+	c, err := micron.New(micron.WithJob("my-job", "* * * * *", executor.Runnable(fn)))
 	// ...
 }
 ```
