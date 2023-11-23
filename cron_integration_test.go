@@ -1,6 +1,6 @@
 //go:build integration
 
-package cron_test
+package micron_test
 
 import (
 	"context"
@@ -115,12 +115,12 @@ func TestCron(t *testing.T) {
 			)
 			is.Empty(t, err)
 
-			c, err := cron.New(
-				cron.WithSelector(sel),
-				cron.WithLogHandler(h),
-				cron.WithErrorBufferSize(5),
-				cron.WithMetrics(metrics.NoOp()),
-				cron.WithTrace(noop.NewTracerProvider().Tracer("test")),
+			c, err := micron.New(
+				micron.WithSelector(sel),
+				micron.WithLogHandler(h),
+				micron.WithErrorBufferSize(5),
+				micron.WithMetrics(metrics.NoOp()),
+				micron.WithTrace(noop.NewTracerProvider().Tracer("test")),
 			)
 			is.Empty(t, err)
 
@@ -179,12 +179,12 @@ func TestFillErrorBuffer(t *testing.T) {
 	)
 	is.Empty(t, err)
 
-	c, err := cron.New(
-		cron.WithSelector(sel),
-		cron.WithLogHandler(h),
-		cron.WithErrorBufferSize(0),
-		cron.WithMetrics(metrics.NoOp()),
-		cron.WithTrace(noop.NewTracerProvider().Tracer("test")),
+	c, err := micron.New(
+		micron.WithSelector(sel),
+		micron.WithLogHandler(h),
+		micron.WithErrorBufferSize(0),
+		micron.WithMetrics(metrics.NoOp()),
+		micron.WithTrace(noop.NewTracerProvider().Tracer("test")),
 	)
 	is.Empty(t, err)
 
