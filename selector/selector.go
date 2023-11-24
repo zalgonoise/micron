@@ -14,7 +14,7 @@ const (
 	minStepDuration = 50 * time.Millisecond
 	defaultTimeout  = time.Second
 
-	errSelectorDomain = errs.Domain("x/cron/selector")
+	errSelectorDomain = errs.Domain("micron/selector")
 
 	ErrEmpty = errs.Kind("empty")
 
