@@ -422,7 +422,7 @@ func TestNoOp(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	cronString := "@nope"
+	cron := "@nope"
 	r := Runnable(func(ctx context.Context) error {
 		return nil
 	})
@@ -447,7 +447,7 @@ func TestNew(t *testing.T) {
 			name: "InvalidCronString",
 			conf: []cfg.Option[Config]{
 				WithRunners(r),
-				WithSchedule(cronString),
+				WithSchedule(cron),
 			},
 			err: cronlex.ErrInvalidFrequency,
 		},

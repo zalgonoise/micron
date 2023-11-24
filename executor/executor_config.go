@@ -11,9 +11,9 @@ import (
 )
 
 type Config struct {
-	scheduler  schedule.Scheduler
-	cronString string
-	loc        *time.Location
+	scheduler schedule.Scheduler
+	cron      string
+	loc       *time.Location
 
 	runners []Runner
 
@@ -75,13 +75,13 @@ func WithScheduler(sched schedule.Scheduler) cfg.Option[Config] {
 // This call returns a cfg.NoOp cfg.Option if the cron string is empty.
 //
 // This option can be followed by a WithLocation option.
-func WithSchedule(cronString string) cfg.Option[Config] {
-	if cronString == "" {
+func WithSchedule(cron string) cfg.Option[Config] {
+	if cron == "" {
 		return cfg.NoOp[Config]{}
 	}
 
 	return cfg.Register(func(config Config) Config {
-		config.cronString = cronString
+		config.cron = cron
 
 		return config
 	})
