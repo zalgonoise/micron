@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const ServiceName = "cron"
+const ServiceName = "micron"
 
 // Tracer returns the registered tracer for this service. It defaults to a no-op trace.Tracer if not yet initialized.
 func Tracer() trace.Tracer {
