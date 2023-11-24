@@ -369,9 +369,9 @@ func TestNewWithJob(t *testing.T) {
 	})
 
 	type job struct {
-		id         string
-		cronString string
-		runners    []executor.Runner
+		id      string
+		cron    string
+		runners []executor.Runner
 	}
 
 	for _, testcase := range []struct {
@@ -382,38 +382,38 @@ func TestNewWithJob(t *testing.T) {
 		{
 			name: "Success/SingleRunner",
 			jobs: []job{{
-				id:         "ok-job",
-				cronString: "* * * * * *",
-				runners:    []executor.Runner{runner1},
+				id:      "ok-job",
+				cron:    "* * * * * *",
+				runners: []executor.Runner{runner1},
 			}},
 		},
 		{
 			name: "Success/MultiRunner",
 			jobs: []job{{
-				id:         "ok-job",
-				cronString: "* * * * * *",
-				runners:    []executor.Runner{runner1, runner2},
+				id:      "ok-job",
+				cron:    "* * * * * *",
+				runners: []executor.Runner{runner1, runner2},
 			}},
 		},
 		{
 			name: "Success/NoID/MultiRunner",
 			jobs: []job{{
-				cronString: "* * * * * *",
-				runners:    []executor.Runner{runner1, runner2},
+				cron:    "* * * * * *",
+				runners: []executor.Runner{runner1, runner2},
 			}},
 		},
 		{
 			name: "Success/MultiJob/MultiRunner",
 			jobs: []job{
 				{
-					id:         "seconds",
-					cronString: "* * * * * *",
-					runners:    []executor.Runner{runner1},
+					id:      "seconds",
+					cron:    "* * * * * *",
+					runners: []executor.Runner{runner1},
 				},
 				{
-					id:         "minutes",
-					cronString: "* * * * *",
-					runners:    []executor.Runner{runner2},
+					id:      "minutes",
+					cron:    "* * * * *",
+					runners: []executor.Runner{runner2},
 				},
 			},
 		},
@@ -428,8 +428,8 @@ func TestNewWithJob(t *testing.T) {
 		{
 			name: "Fail/NoRunners",
 			jobs: []job{{
-				id:         "ok-job",
-				cronString: "* * * * * *",
+				id:   "ok-job",
+				cron: "* * * * * *",
 			}},
 			err: ErrEmptySelector,
 		},
@@ -440,7 +440,7 @@ func TestNewWithJob(t *testing.T) {
 			for i := range testcase.jobs {
 				jobs = append(jobs, WithJob(
 					testcase.jobs[i].id,
-					testcase.jobs[i].cronString,
+					testcase.jobs[i].cron,
 					testcase.jobs[i].runners...,
 				))
 			}

@@ -43,7 +43,7 @@ func TestCron(t *testing.T) {
 	runner2 := testRunner{v: 2, ch: values}
 	runner3 := testRunner{v: 3, ch: values, err: testErr}
 
-	cronString := "* * * * * *"
+	everytime := "* * * * * *"
 	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
 	defaultDur := 1005 * time.Millisecond
@@ -58,7 +58,7 @@ func TestCron(t *testing.T) {
 		{
 			name: "SingleExecTwoRunners",
 			execMap: map[string][]executor.Runner{
-				cronString: {runner1, runner2},
+				everytime: {runner1, runner2},
 			},
 			dur:   defaultDur,
 			wants: []int{1, 2},
@@ -75,8 +75,8 @@ func TestCron(t *testing.T) {
 		{
 			name: "TwoExecsOffsetFrequency",
 			execMap: map[string][]executor.Runner{
-				cronString: {runner1},
-				twoMinOdd:  {runner2},
+				everytime: {runner1},
+				twoMinOdd: {runner2},
 			},
 			dur:   2100 * time.Millisecond,
 			wants: []int{1, 1, 2},
@@ -84,7 +84,7 @@ func TestCron(t *testing.T) {
 		{
 			name: "OneExecWithError",
 			execMap: map[string][]executor.Runner{
-				cronString: {runner3},
+				everytime: {runner3},
 			},
 			dur:   defaultDur,
 			wants: []int{3},
@@ -96,9 +96,9 @@ func TestCron(t *testing.T) {
 			execs := make([]executor.Executor, 0, len(testcase.execMap))
 
 			var n int
-			for cronString, runners := range testcase.execMap {
+			for cron, runners := range testcase.execMap {
 				exec, err := executor.New(fmt.Sprintf("%d", n),
-					executor.WithSchedule(cronString),
+					executor.WithSchedule(cron),
 					executor.WithLocation(time.Local),
 					executor.WithRunners(runners...),
 					executor.WithLogHandler(h),
