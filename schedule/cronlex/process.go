@@ -43,12 +43,12 @@ type Schedule struct {
 //
 // Before parsing the string, this function validates that the cron string does not contain any illegal characters,
 // before actually scanning and processing it.
-func Parse(cronString string) (s Schedule, err error) {
-	if err = validateCharacters(cronString); err != nil {
+func Parse(cron string) (s Schedule, err error) {
+	if err = validateCharacters(cron); err != nil {
 		return s, err
 	}
 
-	return parse.Run([]byte(cronString), StateFunc, ParseFunc, ProcessFunc)
+	return parse.Run([]byte(cron), StateFunc, ParseFunc, ProcessFunc)
 }
 
 // ProcessFunc is the third and last phase of the parser, which consumes a parse.Tree scoped to Token and byte,
