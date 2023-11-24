@@ -144,7 +144,7 @@ func newPrometheus(port int) (Metrics, error) {
 		}, []string{"id"}),
 		cronUp: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "cron_up",
-			Help: "Signals whether cron is running or not",
+			Help: "Signals whether micron is running or not",
 		}),
 	}
 
