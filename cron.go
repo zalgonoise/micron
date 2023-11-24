@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	errDomain = errs.Domain("x/cron")
+	errDomain = errs.Domain("micron")
 
 	ErrEmpty = errs.Kind("empty")
 
