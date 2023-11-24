@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	defaultID    = "cron.executor"
+	defaultID    = "micron.executor"
 	bufferPeriod = 100 * time.Millisecond
 
-	errDomain = errs.Domain("x/cron/executor")
+	errDomain = errs.Domain("micron/executor")
 
 	ErrEmpty = errs.Kind("empty")
 
@@ -156,7 +156,7 @@ func (e Executable) ID() string {
 // this interface or as a Runnable using the WithRunners option, as well as a schedule.Scheduler using the
 // WithScheduler option -- alternatively, callers can simply pass a cron string directly using the WithSchedule option.
 //
-// If an ID is not supplied, then the default ID of `cron.executor` is set.
+// If an ID is not supplied, then the default ID of `micron.executor` is set.
 func New(id string, options ...cfg.Option[Config]) (Executor, error) {
 	config := cfg.New(options...)
 
@@ -190,7 +190,7 @@ func newExecutable(id string, config Config) (Executor, error) {
 		return noOpExecutor{}, ErrEmptyRunnerList
 	}
 
-	if config.scheduler == nil && config.cronString == "" {
+	if config.scheduler == nil && config.cron == "" {
 		return noOpExecutor{}, ErrEmptyScheduler
 	}
 
@@ -203,8 +203,8 @@ func newExecutable(id string, config Config) (Executor, error) {
 		// create a new scheduler from config
 		opts := make([]cfg.Option[schedule.Config], 0, 2)
 
-		if config.cronString != "" {
-			opts = append(opts, schedule.WithSchedule(config.cronString))
+		if config.cron != "" {
+			opts = append(opts, schedule.WithSchedule(config.cron))
 		}
 
 		if config.loc != nil {
