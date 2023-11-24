@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	errDomain = errs.Domain("x/cron/schedule/cronlex")
+	errDomain = errs.Domain("micron/schedule/cronlex")
 
 	ErrEmpty       = errs.Kind("empty")
 	ErrInvalid     = errs.Kind("invalid")
