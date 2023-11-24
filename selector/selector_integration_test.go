@@ -41,8 +41,8 @@ func TestSelector(t *testing.T) {
 	runner1 := testRunner{v: 1, ch: values}
 	runner2 := testRunner{v: 2, ch: values}
 
-	cron := "* * * * * *"
-	cron2 := "0-59 * * * * *"
+	everytime := "* * * * * *"
+	everytime2 := "0-59 * * * * *"
 	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
 	defaultDur := 2010 * time.Millisecond
@@ -57,7 +57,7 @@ func TestSelector(t *testing.T) {
 		{
 			name: "SingleExecTwoRunners",
 			execMap: map[string][]executor.Runner{
-				cron: {runner1, runner2},
+				everytime: {runner1, runner2},
 			},
 			dur:   defaultDur,
 			wants: []int{1, 1, 2, 2},
@@ -74,7 +74,7 @@ func TestSelector(t *testing.T) {
 		{
 			name: "TwoExecsOffsetFrequency",
 			execMap: map[string][]executor.Runner{
-				cron:      {runner1},
+				everytime: {runner1},
 				twoMinOdd: {runner2},
 			},
 			dur:   defaultDur,
@@ -83,8 +83,8 @@ func TestSelector(t *testing.T) {
 		{
 			name: "TwoExecsSameSchedule",
 			execMap: map[string][]executor.Runner{
-				cron:  {runner1},
-				cron2: {runner2},
+				everytime:  {runner1},
+				everytime2: {runner2},
 			},
 			dur:   defaultDur,
 			wants: []int{1, 1, 2, 2},
@@ -96,9 +96,9 @@ func TestSelector(t *testing.T) {
 				execs := make([]executor.Executor, 0, len(testcase.execMap))
 
 				var n int
-				for cronString, runners := range testcase.execMap {
+				for cron, runners := range testcase.execMap {
 					exec, err := executor.New(fmt.Sprintf("%d", n),
-						executor.WithSchedule(cronString),
+						executor.WithSchedule(cron),
 						executor.WithLocation(time.Local),
 						executor.WithRunners(runners...),
 						executor.WithLogHandler(h),
@@ -172,7 +172,7 @@ func TestSelector(t *testing.T) {
 }
 
 func TestNonBlocking(t *testing.T) {
-	cronString := "* * * * * *"
+	cron := "* * * * * *"
 	h := slog.NewJSONHandler(os.Stderr, nil)
 	testErr := errors.New("test error")
 
@@ -180,7 +180,7 @@ func TestNonBlocking(t *testing.T) {
 	defer cancel()
 
 	exec, err := executor.New("test",
-		executor.WithSchedule(cronString),
+		executor.WithSchedule(cron),
 		executor.WithLocation(time.Local),
 		executor.WithRunners(executor.Runnable(func(ctx context.Context) error {
 			<-time.After(100 * time.Millisecond)
