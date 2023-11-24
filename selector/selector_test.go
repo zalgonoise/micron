@@ -22,11 +22,11 @@ func TestConfig(t *testing.T) {
 	runner := executor.Runnable(func(context.Context) error {
 		return nil
 	})
-	cronString := "* * * * * *"
+	cron := "* * * * * *"
 
 	exec, err := executor.New("test",
 		executor.WithRunners(runner),
-		executor.WithSchedule(cronString),
+		executor.WithSchedule(cron),
 	)
 	is.Empty(t, err)
 
@@ -408,7 +408,7 @@ func TestWithObservability(t *testing.T) {
 	errRunner := executor.Runnable(func(context.Context) error {
 		return testErr
 	})
-	cronString := "* * * * * *"
+	cron := "* * * * * *"
 
 	for _, testcase := range []struct {
 		name   string
@@ -429,7 +429,7 @@ func TestWithObservability(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			exec, err := executor.New("test",
 				executor.WithRunners(testcase.runner),
-				executor.WithSchedule(cronString),
+				executor.WithSchedule(cron),
 			)
 			is.Empty(t, err)
 
