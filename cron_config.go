@@ -51,17 +51,17 @@ func WithSelector(sel selector.Selector) cfg.Option[Config] {
 //
 // Note: this call is only valid if when creating a new Runtime via the New function, no WithSelector option is
 // supplied; only WithJob. A call to New supports multiple WithJob cfg.Option.
-func WithJob(id, cronString string, runners ...executor.Runner) cfg.Option[Config] {
+func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[Config] {
 	if len(runners) == 0 {
 		return cfg.NoOp[Config]{}
 	}
 
 	if id == "" {
-		id = cronString
+		id = cron
 	}
 
 	exec, err := executor.New(id,
-		executor.WithSchedule(cronString),
+		executor.WithSchedule(cron),
 		executor.WithRunners(runners...),
 	)
 	if err != nil {
