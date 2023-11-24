@@ -9,8 +9,8 @@ import (
 )
 
 type Config struct {
-	cronString string
-	loc        *time.Location
+	cron string
+	loc  *time.Location
 
 	handler slog.Handler
 	metrics Metrics
@@ -20,13 +20,13 @@ type Config struct {
 // WithSchedule configures the Scheduler with the input cron string.
 //
 // This call returns a cfg.NoOp cfg.Option if the input cron string is empty.
-func WithSchedule(cronString string) cfg.Option[Config] {
-	if cronString == "" {
+func WithSchedule(cron string) cfg.Option[Config] {
+	if cron == "" {
 		return cfg.NoOp[Config]{}
 	}
 
 	return cfg.Register(func(config Config) Config {
-		config.cronString = cronString
+		config.cron = cron
 
 		return config
 	})

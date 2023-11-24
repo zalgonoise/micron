@@ -20,102 +20,102 @@ import (
 
 func TestCronSchedule_Next(t *testing.T) {
 	for _, testcase := range []struct {
-		name       string
-		cronString string
-		sched      Scheduler
-		input      time.Time
-		wants      time.Time
-		err        error
+		name  string
+		cron  string
+		sched Scheduler
+		input time.Time
+		wants time.Time
+		err   error
 	}{
 		{
-			name:       "Success/EverySecond",
-			cronString: "* * * * * *",
-			input:      time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 30, 10, 12, 44, 0, time.UTC),
+			name:  "Success/EverySecond",
+			cron:  "* * * * * *",
+			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 30, 10, 12, 44, 0, time.UTC),
 		},
 		{
-			name:       "Success/EveryFifthSecond",
-			cronString: "*/5 * * * * *",
-			input:      time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 30, 10, 12, 45, 0, time.UTC),
+			name:  "Success/EveryFifthSecond",
+			cron:  "*/5 * * * * *",
+			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 30, 10, 12, 45, 0, time.UTC),
 		},
 		{
-			name:       "Success/EveryFifthSecondGoNext",
-			cronString: "*/5 * * * * *",
-			input:      time.Date(2023, 10, 30, 10, 12, 45, 0, time.UTC),
-			wants:      time.Date(2023, 10, 30, 10, 12, 50, 0, time.UTC),
+			name:  "Success/EveryFifthSecondGoNext",
+			cron:  "*/5 * * * * *",
+			input: time.Date(2023, 10, 30, 10, 12, 45, 0, time.UTC),
+			wants: time.Date(2023, 10, 30, 10, 12, 50, 0, time.UTC),
 		},
 		{
-			name:       "Success/SecondsOddCombo",
-			cronString: "0/3,2 * * * * *",
+			name: "Success/SecondsOddCombo",
+			cron: "0/3,2 * * * * *",
 
 			input: time.Date(2023, 10, 30, 10, 12, 45, 0, time.UTC),
 			wants: time.Date(2023, 10, 30, 10, 12, 48, 0, time.UTC),
 		},
 		{
-			name:       "Success/EveryMinute",
-			cronString: "* * * * *",
-			input:      time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 30, 10, 13, 0, 0, time.UTC),
+			name:  "Success/EveryMinute",
+			cron:  "* * * * *",
+			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 30, 10, 13, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/OneHour",
-			cronString: "0 * * * *",
-			input:      time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 30, 11, 0, 0, 0, time.UTC),
+			name:  "Success/OneHour",
+			cron:  "0 * * * *",
+			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 30, 11, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/OneDay/WithDayChange",
-			cronString: "0 0 * * *",
-			input:      time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			name:  "Success/OneDay/WithDayChange",
+			cron:  "0 0 * * *",
+			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithWeekday/NoWeekends",
-			cronString: "0 0 * * 1-5",
-			input:      time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithWeekday/NoWeekends",
+			cron:  "0 0 * * 1-5",
+			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithWeekday/NoWeekendsAndWednesdays",
-			cronString: "0 0 * * 1,2,4,5",
-			input:      time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithWeekday/NoWeekendsAndWednesdays",
+			cron:  "0 0 * * 1,2,4,5",
+			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
-			cronString: "0 0 * * 1-2,4-5",
-			input:      time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
+			cron:  "0 0 * * 1-2,4-5",
+			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
-			cronString: "0 0/3,2 * * 1-2,4-5",
-			input:      time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
+			cron:  "0 0/3,2 * * 1-2,4-5",
+			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithWeekday/NoWeekendsStepSchedule",
-			cronString: "0 0 * * 1,2,3,4,5",
-			input:      time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithWeekday/NoWeekendsStepSchedule",
+			cron:  "0 0 * * 1,2,3,4,5",
+			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/WithStepSchedule/Every3Hours",
-			cronString: "0 */3 * * *",
-			input:      time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants:      time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			name:  "Success/WithStepSchedule/Every3Hours",
+			cron:  "0 */3 * * *",
+			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/EveryMinuteFromZeroToFive",
-			cronString: "0-5 * * * *",
+			name: "Success/EveryMinuteFromZeroToFive",
+			cron: "0-5 * * * *",
 
 			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
 			wants: time.Date(2023, 10, 30, 11, 0, 0, 0, time.UTC),
 		},
 		{
-			name:       "Success/InvalidCronString",
-			cronString: "*",
+			name: "Success/InvalidCronString",
+			cron: "*",
 
 			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
 			err:   cronlex.ErrInvalidNodeType,
@@ -123,7 +123,7 @@ func TestCronSchedule_Next(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			sched, err := New(
-				WithSchedule(testcase.cronString),
+				WithSchedule(testcase.cron),
 				WithLocation(time.UTC),
 				WithLogHandler(log.NoOp()),
 				WithMetrics(metrics.NoOp()),

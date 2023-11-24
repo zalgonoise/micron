@@ -116,7 +116,7 @@ func New(options ...cfg.Option[Config]) (Scheduler, error) {
 
 func newScheduler(config Config) (Scheduler, error) {
 	// parse cron string
-	sched, err := cronlex.Parse(config.cronString)
+	sched, err := cronlex.Parse(config.cron)
 	if err != nil {
 		return noOpScheduler{}, err
 	}
