@@ -84,8 +84,8 @@ func (r runtime) Err() <-chan error {
 // The minimum requirements to create a Runtime is to supply either a selector.Selector through the WithSelector option,
 // or a (set of) executor.Executor(s) through the WithJob option. The caller is free to select any they desire,
 // and as such both means of creating this requirement are served as cfg.Option.
-func New(options ...cfg.Option[Config]) (Runtime, error) {
-	config := cfg.New(options...)
+func New(options ...cfg.Option[*Config]) (Runtime, error) {
+	config := cfg.Set(new(Config), options...)
 
 	cron, err := newRuntime(config)
 	if err != nil {
@@ -107,7 +107,7 @@ func New(options ...cfg.Option[Config]) (Runtime, error) {
 	return cron, nil
 }
 
-func newRuntime(config Config) (Runtime, error) {
+func newRuntime(config *Config) (Runtime, error) {
 	// validate input
 	if config.sel == nil {
 		sel, err := selector.New(selector.WithExecutors(config.execs...))
