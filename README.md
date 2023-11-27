@@ -104,30 +104,30 @@ This function only has [a variadic parameter for `cfg.Option[cron.Config]`](./cr
 on the way you build your cron runtime, to be as simple or as detailed as you want it to be -- provided that it complies 
 with the minimum requirements to create one; to supply either:
 - a [`selector.Selector`](./selector/selector.go#L37) 
-- or, a (set of) [`executor.Runner`](./executor/executor.go#L40). This can be supplied as 
-[`executor.Runnable`](./executor/executor.go#L53) as well.
+- or, a (set of) [`executor.Runner`](./executor/executor.go#L41). This can be supplied as 
+[`executor.Runnable`](./executor/executor.go#L54) as well.
 
 ```go
-func New(options ...cfg.Option[Config]) (Runtime, error)
+func New(options ...cfg.Option[*Config]) (Runtime, error)
 ```
 
 Below is a table with all the options available for creating a cron runtime:
 
 |                   Function                    |                                       Input Parameters                                       |                                                                                               Description                                                                                               |
 |:---------------------------------------------:|:--------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-|    [`WithSelector`](./cron_config.go#L32)     |                    [`sel selector.Selector`](./selector/selector.go#L37)                     |                                               Configures the  with the input [`selector.Selector`](./selector/selector.go#L37).                                               |
-|       [`WithJob`](./cron_config.go#L54)       | `id string`, `cron string`, [`runners ...executor.Runner`](./executor/executor.go#L40) | Adds a new [`executor.Executor`](./executor/executor.go#L84) to the [`Runtime`](./cron.go#L34) configuration from the input ID, cron string and set of [`executor.Runner`](./executor/executor.go#L40). |
-| [`WithErrorBufferSize`](./cron_config.go#L84) |                                          `size int`                                          |                                   Defines the capacity of the error channel that the [`Runtime`](./cron.go#L34) exposes in its [`Runtime.Err`](./cron.go#L77) method.                                   |
-|     [`WithMetrics`](./cron_config.go#L97)     |                        [`m cron.Metrics`](./cron_with_metrics.go#L10)                        |                                                                Decorates the [`Runtime`](./cron.go#L34) with the input metrics registry.                                                                |
-|     [`WithLogger`](./cron_config.go#L110)     |                 [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)                  |                                                                     Decorates the [`Runtime`](./cron.go#L34) with the input logger.                                                                     |
-|   [`WithLogHandler`](./cron_config.go#L123)   |                [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)                 |                                                           Decorates the [`Runtime`](./cron.go#L34) with logging using the input log handler.                                                            |
-|     [`WithTrace`](./cron_config.go#L136)      |      [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer)       |                                                                  Decorates the [`Runtime`](./cron.go#L34) with the input trace.Tracer.                                                                  |
+|    [`WithSelector`](./cron_config.go#L33)     |                    [`sel selector.Selector`](./selector/selector.go#L37)                     |                                               Configures the  with the input [`selector.Selector`](./selector/selector.go#L37).                                               |
+|       [`WithJob`](./cron_config.go#L55)       | `id string`, `cron string`, [`runners ...executor.Runner`](./executor/executor.go#L41) | Adds a new [`executor.Executor`](./executor/executor.go#L85) to the [`Runtime`](./cron.go#L34) configuration from the input ID, cron string and set of [`executor.Runner`](./executor/executor.go#L41). |
+| [`WithErrorBufferSize`](./cron_config.go#L85) |                                          `size int`                                          |                                   Defines the capacity of the error channel that the [`Runtime`](./cron.go#L34) exposes in its [`Runtime.Err`](./cron.go#L77) method.                                   |
+|     [`WithMetrics`](./cron_config.go#L98)     |                        [`m cron.Metrics`](./cron_with_metrics.go#L10)                        |                                                                Decorates the [`Runtime`](./cron.go#L34) with the input metrics registry.                                                                |
+|     [`WithLogger`](./cron_config.go#L111)     |                 [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)                  |                                                                     Decorates the [`Runtime`](./cron.go#L34) with the input logger.                                                                     |
+|   [`WithLogHandler`](./cron_config.go#L124)   |                [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)                 |                                                           Decorates the [`Runtime`](./cron.go#L34) with logging using the input log handler.                                                            |
+|     [`WithTrace`](./cron_config.go#L137)      |      [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer)       |                                                                  Decorates the [`Runtime`](./cron.go#L34) with the input trace.Tracer.                                                                  |
 
 The simplest possible cron runtime could be the result of a call to [`cron.New`](./cron.go#L87) with a single 
-[`cron.WithJob`](./cron_config.go#L54) option. This creates all the components that a cron runtime needs with the most
+[`cron.WithJob`](./cron_config.go#L55) option. This creates all the components that a cron runtime needs with the most
 minimal setup. It creates the underlying selector and executors.
 
-Otherwise, the caller must use the [`WithSelector`](./cron_config.go#L32) option, and configure a 
+Otherwise, the caller must use the [`WithSelector`](./cron_config.go#L33) option, and configure a 
 [`selector.Selector`](./selector/selector.go#L37) manually when doing so. This results in more _boilerplate_ to get the
 runtime set up, but provides deeper control on how the cron should be composed. The next chapter covers what is a
 [`selector.Selector`](./selector/selector.go#L37) and how to create one.
@@ -138,19 +138,19 @@ _______
 
 This component is responsible for picking up the next job to execute, according to their schedule frequency. For this, 
 the [`Selector`](./selector/selector.go#L37) is configured with a set of 
-[`executor.Executor`](./executor/executor.go#L84), which in turn will expose a 
-[`Next` method](./executor/executor.go#L92). With this information, the [`Selector`](./selector/selector.go#L37) cycles 
-through its [`executor.Executor`](./executor/executor.go#L84) and picks up the next task(s) to run.
+[`executor.Executor`](./executor/executor.go#L85), which in turn will expose a 
+[`Next` method](./executor/executor.go#L93). With this information, the [`Selector`](./selector/selector.go#L37) cycles 
+through its [`executor.Executor`](./executor/executor.go#L85) and picks up the next task(s) to run.
 
 While the [`Selector`](./selector/selector.go#L37) calls the 
-[`executor.Executor`'s `Exec` method](./executor/executor.go#L90), the actual waiting is within the
-[`executor.Executor`'s](./executor/executor.go#L84) logic.
+[`executor.Executor`'s `Exec` method](./executor/executor.go#L91), the actual waiting is within the
+[`executor.Executor`'s](./executor/executor.go#L85) logic.
 
 You're able to create a [`Selector`](./selector/selector.go#L37) through 
-[its constructor function](./selector/selector.go#L142):
+[its constructor function](./selector/selector.go#L143):
 
 ```go
-func New(options ...cfg.Option[Config]) (Selector, error)
+func New(options ...cfg.Option[*Config]) (Selector, error)
 ```
 
 
@@ -159,16 +159,16 @@ Below is a table with all the options available for creating a cron job selector
 
 |                        Function                        |                                 Input Parameters                                  |                                                                                    Description                                                                                     |
 |:------------------------------------------------------:|:---------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-|  [`WithExecutors`](./selector/selector_config.go#L27)  |          [`executors ...executor.Executor`](./executor/executor.go#L84)           |                            Configures the [`Selector`](./selector/selector.go#L37) with the input [`executor.Executor`(s)](./executor/executor.go#L84).                            |
-|    [`WithBlock`](./selector/selector_config.go#L61)    |                                                                                   |       Configures the [`Selector`](./selector/selector.go#L37) to block (wait) for the underlying [`executor.Executor`(s)](./executor/executor.go#L84) to complete the task.        |
-|   [`WithTimeout`](./selector/selector_config.go#L74)   |                                `dur time.Duration`                                | Configures a (non-blocking) [`Selector`](./selector/selector.go#L37) to wait a certain duration before detaching of the executable task, before continuing to select the next one. |
-|   [`WithMetrics`](./selector/selector_config.go#L87)   |          [`m selector.Metrics`](./selector/selector_with_metrics.go#L10)          |                                              Decorates the [`Selector`](./selector/selector.go#L37) with the input metrics registry.                                               |
-|   [`WithLogger`](./selector/selector_config.go#L100)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |                                                   Decorates the [`Selector`](./selector/selector.go#L37) with the input logger.                                                    |
-| [`WithLogHandler`](./selector/selector_config.go#L113) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           |                                          Decorates the [`Selector`](./selector/selector.go#L37) with logging using the input log handler.                                          |
-|   [`WithTrace`](./selector/selector_config.go#L126)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |                                                Decorates the [`Selector`](./selector/selector.go#L37) with the input trace.Tracer.                                                 |
+|  [`WithExecutors`](./selector/selector_config.go#L27)  |          [`executors ...executor.Executor`](./executor/executor.go#L85)           |                            Configures the [`Selector`](./selector/selector.go#L37) with the input [`executor.Executor`(s)](./executor/executor.go#L85).                            |
+|    [`WithBlock`](./selector/selector_config.go#L62)    |                                                                                   |       Configures the [`Selector`](./selector/selector.go#L37) to block (wait) for the underlying [`executor.Executor`(s)](./executor/executor.go#L85) to complete the task.        |
+|   [`WithTimeout`](./selector/selector_config.go#L75)   |                                `dur time.Duration`                                | Configures a (non-blocking) [`Selector`](./selector/selector.go#L37) to wait a certain duration before detaching of the executable task, before continuing to select the next one. |
+|   [`WithMetrics`](./selector/selector_config.go#L88)   |          [`m selector.Metrics`](./selector/selector_with_metrics.go#L10)          |                                              Decorates the [`Selector`](./selector/selector.go#L37) with the input metrics registry.                                               |
+|   [`WithLogger`](./selector/selector_config.go#L101)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |                                                   Decorates the [`Selector`](./selector/selector.go#L37) with the input logger.                                                    |
+| [`WithLogHandler`](./selector/selector_config.go#L114) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           |                                          Decorates the [`Selector`](./selector/selector.go#L37) with logging using the input log handler.                                          |
+|   [`WithTrace`](./selector/selector_config.go#L127)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |                                                Decorates the [`Selector`](./selector/selector.go#L37) with the input trace.Tracer.                                                 |
 
 There is a catch to the [`Selector`](./selector/selector.go#L37), which is the actual job's execution time. While the 
-[`Selector`](./selector/selector.go#L37) cycles through its [`executor.Executor`](./executor/executor.go#L84) list, it 
+[`Selector`](./selector/selector.go#L37) cycles through its [`executor.Executor`](./executor/executor.go#L85) list, it 
 will execute the task while waiting for it to return with or without an error. This may cause issues when a given 
 running task takes too long to complete when there are other, very frequent tasks. If there is a situation where the 
 long-running task overlaps the execution time for another scheduled job, that job's execution is potentially skipped -- 
@@ -181,55 +181,55 @@ executions. There is less resource overhead to it, and the error returns are ful
 - A non-blocking one, that waits for a job to raise an error in a goroutine, with a set timeout (either set by the 
 caller or a default one). This implementation is great if the jobs are too frequent and / or the tasks too long, when it
 risks skipping executions due to stuck long-running tasks. It relies more heavily on having configured Observability at
-least on the [`executor.Executor`](./executor/executor.go#L84) level to underline those events (which get detached from 
+least on the [`executor.Executor`](./executor/executor.go#L85) level to underline those events (which get detached from 
 the [`Selector`](./selector/selector.go#L37) after timing out).
 
 It is important to have a good idea of how your cron jobs will execute and how often, or simply ensure that there is at 
-least logging enabled for the configured [`executor.Executor`(s)](./executor/executor.go#L84).
+least logging enabled for the configured [`executor.Executor`(s)](./executor/executor.go#L85).
 _______
 
 #### Cron Executor
 
-Like the name implies, the [`Executor`](./executor/executor.go#L84) is the component that actually executes the job, on 
+Like the name implies, the [`Executor`](./executor/executor.go#L85) is the component that actually executes the job, on 
 its next scheduled time.
 
-The [`Executor`](./executor/executor.go#L84) is composed of a [cron schedule](#cron-schedule) and a (set of) 
-[`Runner`(s)](./executor/executor.go#L40). Also, the [`Executor`](./executor/executor.go#L84) stores an ID that is used 
+The [`Executor`](./executor/executor.go#L85) is composed of a [cron schedule](#cron-schedule) and a (set of) 
+[`Runner`(s)](./executor/executor.go#L41). Also, the [`Executor`](./executor/executor.go#L85) stores an ID that is used 
 to identify this particular job.
 
-Having these 3 components in mind, it's natural that the [`Executor`](./executor/executor.go#L84) exposes three methods:
-- [`Exec`](./executor/executor.go#L90) - runs the task when on its scheduled time.
-- [`Next`](./executor/executor.go#L92) - calls the underlying 
-[`schedule.Scheduler` Next method](./schedule/scheduler.go#L26).
-- [`ID`](./executor/executor.go#L94) - returns the ID.
+Having these 3 components in mind, it's natural that the [`Executor`](./executor/executor.go#L85) exposes three methods:
+- [`Exec`](./executor/executor.go#L91) - runs the task when on its scheduled time.
+- [`Next`](./executor/executor.go#L93) - calls the underlying 
+[`schedule.Scheduler` Next method](./schedule/scheduler.go#L30).
+- [`ID`](./executor/executor.go#L95) - returns the ID.
 
-Considering that the [`Executor`](./executor/executor.go#L84) holds a specific 
-[`schedule.Scheduler`](./schedule/scheduler.go#L24), it is also responsible for managing any waiting time before the 
+Considering that the [`Executor`](./executor/executor.go#L85) holds a specific 
+[`schedule.Scheduler`](./schedule/scheduler.go#L28), it is also responsible for managing any waiting time before the 
 job is executed. The strategy employed by the [`Executable`](./executor/executor.go#L99) type is one that calculates the
 duration until the next job, and sleeps until that time is reached (instead of, for example, calling the
-[`schedule.Scheduler` Next method](./schedule/scheduler.go#L26) every second).
+[`schedule.Scheduler` Next method](./schedule/scheduler.go#L30) every second).
 
 
-To create an [`Executor`](./executor/executor.go#L84), you can use the [`New`](./executor/executor.go#L160) function 
-that serves as a constructor. Note that the minimum requirements to creating an [`Executor`](./executor/executor.go#L84)
-are to include both a [`schedule.Scheduler`](./schedule/scheduler.go#L24) with the 
-[`WithScheduler`](./executor/executor_config.go#L61) option (or a cron string, using the 
-[`WithSchedule`](./executor/executor_config.go#L78) option), 
-and at least one [`Runner`](./executor/executor.go#L40) with the [`WithRunners`](./executor/executor_config.go#L29) 
+To create an [`Executor`](./executor/executor.go#L85), you can use the [`New`](./executor/executor.go#L162) function 
+that serves as a constructor. Note that the minimum requirements to creating an [`Executor`](./executor/executor.go#L85)
+are to include both a [`schedule.Scheduler`](./schedule/scheduler.go#L28) with the 
+[`WithScheduler`](./executor/executor_config.go#L62) option (or a cron string, using the 
+[`WithSchedule`](./executor/executor_config.go#L79) option), 
+and at least one [`Runner`](./executor/executor.go#L41) with the [`WithRunners`](./executor/executor_config.go#L29) 
 option.
 
-The [`Runner`](./executor/executor.go#L40) itself is an interface with a single method 
-([`Run`](./executor/executor.go#L47)), that takes in a `context.Context` and returns an error. If your implementation is
+The [`Runner`](./executor/executor.go#L41) itself is an interface with a single method 
+([`Run`](./executor/executor.go#L48)), that takes in a `context.Context` and returns an error. If your implementation is
 so simple that you have it as a function and don't need to create a type for this 
-[`Runner`](./executor/executor.go#L40), then you can use the [`Runnable` type](./executor/executor.go#L53) instead, 
-which is a type alias to a function of the same signature, but implements [`Runner`](./executor/executor.go#L40) by 
+[`Runner`](./executor/executor.go#L41), then you can use the [`Runnable` type](./executor/executor.go#L54) instead, 
+which is a type alias to a function of the same signature, but implements [`Runner`](./executor/executor.go#L41) by 
 calling itself as a function, in its [`Run`](./executor/executor.go#L61) method.
 
-Creating an [`Executor`](./executor/executor.go#L84) is as easy as calling
-[its constructor function](./executor/executor.go#L160):
+Creating an [`Executor`](./executor/executor.go#L85) is as easy as calling
+[its constructor function](./executor/executor.go#L162):
 
 ```go
-func New(id string, options ...cfg.Option[Config]) (Executor, error)
+func New(id string, options ...cfg.Option[*Config]) (Executor, error)
 ```
 
 
@@ -239,31 +239,31 @@ Below is a table with all the options available for creating a cron job executor
 
 |                        Function                        |                                 Input Parameters                                  |                                                                     Description                                                                     |
 |:------------------------------------------------------:|:---------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------------------------------------:|
-|   [`WithRunners`](./executor/executor_config.go#L29)   |                 [`runners ...Runner`](./executor/executor.go#L40)                 |                  Configures the [`Executor`](./executor/executor.go#L84) with the input [`Runner`(s)](./executor/executor.go#L40).                  |
-|  [`WithScheduler`](./executor/executor_config.go#L61)  |             [`sched schedule.Scheduler`](./schedule/scheduler.go#L24)             |             Configures the [`Executor`](./executor/executor.go#L84) with the input [`schedule.Scheduler`](./schedule/scheduler.go#L24).             |
-|  [`WithSchedule`](./executor/executor_config.go#L78)   |                                `cron string`                                |   Configures the [`Executor`](./executor/executor.go#L84) with a [`schedule.Scheduler`](./schedule/scheduler.go#L24) using the input cron string.   |
-|  [`WithLocation`](./executor/executor_config.go#L96)   |                               `loc *time.Location`                                | Configures the [`Executor`](./executor/executor.go#L84) with a [`schedule.Scheduler`](./schedule/scheduler.go#L24) using the input `time.Location`. |
-|  [`WithMetrics`](./executor/executor_config.go#L109)   |          [`m executor.Metrics`](./executor/executor_with_metrics.go#L11)          |                               Decorates the [`Executor`](./executor/executor.go#L84) with the input metrics registry.                               |
-|   [`WithLogger`](./executor/executor_config.go#L122)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |                                    Decorates the [`Executor`](./executor/executor.go#L84) with the input logger.                                    |
-| [`WithLogHandler`](./executor/executor_config.go#L135) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           |                          Decorates the [`Executor`](./executor/executor.go#L84) with logging using the input log handler.                           |
-|   [`WithTrace`](./executor/executor_config.go#L148)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |                                 Decorates the [`Executor`](./executor/executor.go#L84) with the input trace.Tracer.                                 |
+|   [`WithRunners`](./executor/executor_config.go#L29)   |                 [`runners ...Runner`](./executor/executor.go#L41)                 |                  Configures the [`Executor`](./executor/executor.go#L85) with the input [`Runner`(s)](./executor/executor.go#L41).                  |
+|  [`WithScheduler`](./executor/executor_config.go#L62)  |             [`sched schedule.Scheduler`](./schedule/scheduler.go#L28)             |             Configures the [`Executor`](./executor/executor.go#L85) with the input [`schedule.Scheduler`](./schedule/scheduler.go#L28).             |
+|  [`WithSchedule`](./executor/executor_config.go#L79)   |                                `cron string`                                |   Configures the [`Executor`](./executor/executor.go#L85) with a [`schedule.Scheduler`](./schedule/scheduler.go#L28) using the input cron string.   |
+|  [`WithLocation`](./executor/executor_config.go#L97)   |                               `loc *time.Location`                                | Configures the [`Executor`](./executor/executor.go#L85) with a [`schedule.Scheduler`](./schedule/scheduler.go#L28) using the input `time.Location`. |
+|  [`WithMetrics`](./executor/executor_config.go#L110)   |          [`m executor.Metrics`](./executor/executor_with_metrics.go#L11)          |                               Decorates the [`Executor`](./executor/executor.go#L85) with the input metrics registry.                               |
+|   [`WithLogger`](./executor/executor_config.go#L123)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |                                    Decorates the [`Executor`](./executor/executor.go#L85) with the input logger.                                    |
+| [`WithLogHandler`](./executor/executor_config.go#L136) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           |                          Decorates the [`Executor`](./executor/executor.go#L85) with logging using the input log handler.                           |
+|   [`WithTrace`](./executor/executor_config.go#L149)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |                                 Decorates the [`Executor`](./executor/executor.go#L85) with the input trace.Tracer.                                 |
 
 
 _______
 
 #### Cron Scheduler
 
-The [`Scheduler`](./schedule/scheduler.go#L24) is responsible for keeping schedule state (for example, derived from a 
+The [`Scheduler`](./schedule/scheduler.go#L28) is responsible for keeping schedule state (for example, derived from a 
 cron string), and calculating the next job's execution time, with the context of the input timestamp. As such, the
-[`Scheduler` interface only exposes one method, `Next`](./schedule/scheduler.go#L26) which is responsible of making such 
+[`Scheduler` interface only exposes one method, `Next`](./schedule/scheduler.go#L30) which is responsible of making such 
 calculations.
 
-The default implementation of [`Scheduler`](./schedule/scheduler.go#L24), [`CronSchedule`](./schedule/scheduler.go#L32), 
+The default implementation of [`Scheduler`](./schedule/scheduler.go#L28), [`CronSchedule`](./schedule/scheduler.go#L36), 
 will be created from parsing a cron string, and is nothing but a data structure with a 
-[`cronlex.Schedule`](./schedule/cronlex/process.go#L33) bounded to a `time.Location`.
+[`cronlex.Schedule`](./schedule/cronlex/process.go#L56) bounded to a `time.Location`.
 
-While the [`CronSchedule`](./schedule/scheduler.go#L32) leverages different schedule elements with 
-[`cronlex.Resolver` interfaces](./schedule/cronlex/process.go#L26), the [`Scheduler`](./schedule/scheduler.go#L24) uses 
+While the [`CronSchedule`](./schedule/scheduler.go#L36) leverages different schedule elements with 
+[`cronlex.Resolver` interfaces](./schedule/cronlex/process.go#L49), the [`Scheduler`](./schedule/scheduler.go#L28) uses 
 these values as a difference from the input timestamp, to create a new date with a 
 [`time.Date()`](https://pkg.go.dev/time#Date) call. This call merely adds the difference until the next job to the 
 current time, on different elements of the timestamp, with added logic to calculate weekdays if set.
@@ -272,8 +272,8 @@ Fortunately, Go's `time` package is super solid and allows date overflows, calcu
 logic of the base implementation a total breeze, and simple enough to be pulled off as opposed to ticking every second, 
 checking for new jobs.
 
-You're able to create a [`Scheduler`](./schedule/scheduler.go#L24) by calling
-[its constructor function](./schedule/scheduler.go#L94), with the mandatory minimum of supplying a cron string through 
+You're able to create a [`Scheduler`](./schedule/scheduler.go#L28) by calling
+[its constructor function](./schedule/scheduler.go#L98), with the mandatory minimum of supplying a cron string through 
 its [`WithSchedule`](./schedule/scheduler_config.go#L23) option.
 
 ```go
@@ -285,12 +285,12 @@ Below is a table with all the options available for creating a cron job schedule
 
 |                        Function                        |                                 Input Parameters                                  |                                            Description                                             |
 |:------------------------------------------------------:|:---------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------:|
-|  [`WithSchedule`](./schedule/scheduler_config.go#L23)  |                                `cron string`                                |       Configures the [`Scheduler`](./schedule/scheduler.go#L24) with the input cron string.        |
-|  [`WithLocation`](./schedule/scheduler_config.go#L38)  |                               `loc *time.Location`                                |     Configures the [`Scheduler`](./schedule/scheduler.go#L24) with the input `time.Location`.      |
-|  [`WithMetrics`](./schedule/scheduler_config.go#L51)   |         [`m executor.Metrics`](./schedule/scheduler_with_metrics.go#L11)          |     Decorates the [`Scheduler`](./schedule/scheduler.go#L24) with the input metrics registry.      |
-|   [`WithLogger`](./schedule/scheduler_config.go#L64)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |          Decorates the [`Scheduler`](./schedule/scheduler.go#L24) with the input logger.           |
-| [`WithLogHandler`](./schedule/scheduler_config.go#L77) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           | Decorates the [`Scheduler`](./schedule/scheduler.go#L24) with logging using the input log handler. |
-|   [`WithTrace`](./schedule/scheduler_config.go#L90)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |       Decorates the [`Scheduler`](./schedule/scheduler.go#L24) with the input trace.Tracer.        |
+|  [`WithSchedule`](./schedule/scheduler_config.go#L23)  |                                `cron string`                                |       Configures the [`Scheduler`](./schedule/scheduler.go#L28) with the input cron string.        |
+|  [`WithLocation`](./schedule/scheduler_config.go#L38)  |                               `loc *time.Location`                                |     Configures the [`Scheduler`](./schedule/scheduler.go#L28) with the input `time.Location`.      |
+|  [`WithMetrics`](./schedule/scheduler_config.go#L51)   |         [`m executor.Metrics`](./schedule/scheduler_with_metrics.go#L11)          |     Decorates the [`Scheduler`](./schedule/scheduler.go#L28) with the input metrics registry.      |
+|   [`WithLogger`](./schedule/scheduler_config.go#L64)   |            [`logger *slog.Logger`](https://pkg.go.dev/log/slog#Logger)            |          Decorates the [`Scheduler`](./schedule/scheduler.go#L28) with the input logger.           |
+| [`WithLogHandler`](./schedule/scheduler_config.go#L77) |           [`handler slog.Handler`](https://pkg.go.dev/log/slog#Handler)           | Decorates the [`Scheduler`](./schedule/scheduler.go#L28) with logging using the input log handler. |
+|   [`WithTrace`](./schedule/scheduler_config.go#L90)    | [`tracer trace.Tracer`](https://pkg.go.dev/go.opentelemetry.io/otel/trace#Tracer) |       Decorates the [`Scheduler`](./schedule/scheduler.go#L28) with the input trace.Tracer.        |
 
 
 
@@ -298,25 +298,25 @@ _______
 
 ##### Cron Schedule
 
-[`Schedule`](./schedule/cronlex/process.go#L33) is a data structure that holds a set of 
-[`Resolver`s](./schedule/cronlex/process.go#L26), for each node, segment or unit of the schedule. This implementation 
+[`Schedule`](./schedule/cronlex/process.go#L56) is a data structure that holds a set of 
+[`Resolver`s](./schedule/cronlex/process.go#L49), for each node, segment or unit of the schedule. This implementation 
 focuses on the cron string specification with added support for a seconds definition (instead of the usual minutes, 
 hours, days-of-the-month, months and weekdays). Each of these elements are 
-[`Resolver`s](./schedule/cronlex/process.go#L26) interfaces that will calculate the difference until the target value(s)
-is reached. More information on [`Resolver`s](./schedule/cronlex/process.go#L26) in 
+[`Resolver`s](./schedule/cronlex/process.go#L49) interfaces that will calculate the difference until the target value(s)
+is reached. More information on [`Resolver`s](./schedule/cronlex/process.go#L49) in 
 [its own section](#schedule-resolver).
 
-The [`Schedule`](./schedule/cronlex/process.go#L33) only holds the state of a parsed cron string, and its elements are 
-made public so that implementations of [`Scheduler`](./schedule/scheduler.go#L24) can leverage it to calculate the 
+The [`Schedule`](./schedule/cronlex/process.go#L56) only holds the state of a parsed cron string, and its elements are 
+made public so that implementations of [`Scheduler`](./schedule/scheduler.go#L28) can leverage it to calculate the 
 job's next execution time.
 
-To create a new [`Schedule`](./schedule/cronlex/process.go#L33) type, you're able to use the
-[`Parse` function](./schedule/cronlex/process.go#L46), that consumes the input cron string, returning a 
-[`Schedule`](./schedule/cronlex/process.go#L33) and an error if raised. More details on the actual parsing of the string
+To create a new [`Schedule`](./schedule/cronlex/process.go#L56) type, you're able to use the
+[`Parse` function](./schedule/cronlex/process.go#L69), that consumes the input cron string, returning a 
+[`Schedule`](./schedule/cronlex/process.go#L56) and an error if raised. More details on the actual parsing of the string
 [in its own section](#schedule-parser).
 
-Once created, the elements of [`Schedule`](./schedule/cronlex/process.go#L33) are accessed directly, where the caller 
-can use the [`Resolver`](./schedule/cronlex/process.go#L26) interface:
+Once created, the elements of [`Schedule`](./schedule/cronlex/process.go#L56) are accessed directly, where the caller 
+can use the [`Resolver`](./schedule/cronlex/process.go#L49) interface:
 
 ```go
 type Schedule struct {
@@ -333,27 +333,27 @@ _______
 ##### Schedule Resolver
 
 This component calculates the difference between the input value and the (set of) value(s) it is configured to be 
-triggered on, also given a certain maximum value for that [`Resolver`'s](./schedule/cronlex/process.go#L26) range.
+triggered on, also given a certain maximum value for that [`Resolver`'s](./schedule/cronlex/process.go#L49) range.
 
-This difference is useful on a [`Scheduler`](./schedule/scheduler.go#L24), where 
+This difference is useful on a [`Scheduler`](./schedule/scheduler.go#L28), where 
 [`time.Date()`](https://pkg.go.dev/time#Date) sums the input time to the difference until the next execution. As such, 
-given each node in a [`Schedule`](./schedule/cronlex/process.go#L33), it is possible to derive the next time per node,
+given each node in a [`Schedule`](./schedule/cronlex/process.go#L56), it is possible to derive the next time per node,
 following this logic.
 
 Take a minute as an example. It is an element that spans from 0 to 59; and consider all elements start at zero. A
-minutes [`Resolver`](./schedule/cronlex/process.go#L26) is configured with a maximum value of 59, and this example is 
-configured to trigger at minute 15. If the input time is 2:03 PM, the [`Resolver`](./schedule/cronlex/process.go#L26)
-returns a difference of 12. When the [`Scheduler`](./schedule/scheduler.go#L24) gets this information, it adds up the 12
+minutes [`Resolver`](./schedule/cronlex/process.go#L49) is configured with a maximum value of 59, and this example is 
+configured to trigger at minute 15. If the input time is 2:03 PM, the [`Resolver`](./schedule/cronlex/process.go#L49)
+returns a difference of 12. When the [`Scheduler`](./schedule/scheduler.go#L28) gets this information, it adds up the 12
 minutes to the input time, and returns the resulting datetime value.
 
-This also makes the [`Resolver`](./schedule/cronlex/process.go#L26) very flexible, in tandem with the corresponding
-[`Schedule`](./schedule/cronlex/process.go#L33) and [`Scheduler`](./schedule/scheduler.go#L24), providing customizable 
-levels of precision. The seconds [`Resolver`](./schedule/cronlex/process.go#L26) in 
-[`Schedule`](./schedule/cronlex/process.go#L33) is an example of this.
+This also makes the [`Resolver`](./schedule/cronlex/process.go#L49) very flexible, in tandem with the corresponding
+[`Schedule`](./schedule/cronlex/process.go#L56) and [`Scheduler`](./schedule/scheduler.go#L28), providing customizable 
+levels of precision. The seconds [`Resolver`](./schedule/cronlex/process.go#L49) in 
+[`Schedule`](./schedule/cronlex/process.go#L56) is an example of this.
 
-The implementations of [`Resolver`](./schedule/cronlex/process.go#L26) can be found in the 
+The implementations of [`Resolver`](./schedule/cronlex/process.go#L49) can be found in the 
 [`resolve` package](./schedule/resolve/resolve.go). These are derived from parsing a cron string and assigned 
-automatically when calling the [`Parse` function](./schedule/cronlex/process.go#L46).
+automatically when calling the [`Parse` function](./schedule/cronlex/process.go#L69).
 
 To explore the different implementations, it's good to have in mind the modularity in cron schedules:
 - it supports "every value" sequences when using a star (`*`)
@@ -363,9 +363,9 @@ To explore the different implementations, it's good to have in mind the modulari
 - it supports a combination of range values and steps (e.g. `0-15/3`)
 - it supports overrides, for certain configurations (e.g. `@weekly`)
 
-Having this in mind, this could technically be achieved with a single [`Resolver`](./schedule/cronlex/process.go#L26) 
+Having this in mind, this could technically be achieved with a single [`Resolver`](./schedule/cronlex/process.go#L49) 
 type (that you will find for step values), but to maximize performance and reduce complexity where it is not needed, 
-there are four types of [`Resolver`](./schedule/cronlex/process.go#L26):
+there are four types of [`Resolver`](./schedule/cronlex/process.go#L49):
 
 
 ###### `Everytime` Resolver
@@ -375,7 +375,7 @@ type Everytime struct{}
 ```
 
 The [`Everytime Resolver`](./schedule/resolve/resolve.go#L4) always returns zero, meaning that it resolves to the current time 
-always (_trigger now_ type of action). This is the default [`Resolver`](./schedule/cronlex/process.go#L26) whenever a 
+always (_trigger now_ type of action). This is the default [`Resolver`](./schedule/cronlex/process.go#L49) whenever a 
 star (`*`) node is found, for example.
 
 
@@ -422,7 +422,7 @@ type StepSchedule struct {
 
 The [`StepSchedule Resolver`](./schedule/resolve/resolve.go#L42) is the most complex of all -- that could potentially 
 serve all the other implementations, however it can be the most resource-expensive of all 
-[`Resolver`s](./schedule/cronlex/process.go#L26).
+[`Resolver`s](./schedule/cronlex/process.go#L49).
 
 This implementation stores the defined values for the schedule and returns the difference of the closest value ahead of 
 it. This involves scanning all the steps in the sequence as it requires looking into values that are less than the 
@@ -434,7 +434,7 @@ or contains a given frequency delimited by a slash (`/`), it surely will have an
 [`StepSchedule Resolver`](./schedule/resolve/resolve.go#L42) to resolve that / those node(s). 
 
 The [`StepSchedule Resolver`](./schedule/resolve/resolve.go#L42) is the only
-[`Resolver`s](./schedule/cronlex/process.go#L26) which exposes a constructor, with the 
+[`Resolver`s](./schedule/cronlex/process.go#L49) which exposes a constructor, with the 
 [`NewStepSchedule` function](./schedule/resolve/resolve.go#L77), that takes _from_ and _to_ values, 
 a maximum, and a certain frequency (which should be 1 if no custom frequency is desired). Any further additions to 
 the `Steps` in the [`StepSchedule Resolver`](./schedule/resolve/resolve.go#L42), should be added to the data structure,
@@ -445,7 +445,7 @@ func NewStepSchedule(from, to, maximum, frequency int) StepSchedule
 ```
 
 In the [Schedule Parser section](#schedule-parser), we explore how its processor will create the
-[`Schedule`](./schedule/cronlex/process.go#L33) types following some rules, when working with the abstract syntax tree 
+[`Schedule`](./schedule/cronlex/process.go#L56) types following some rules, when working with the abstract syntax tree 
 from parsing the cron string.
 _______
 
@@ -456,8 +456,8 @@ nail down accurately as it is the main source of user input within this library'
 caller's responsibility as they pass into it whatever they want. But having a correct understanding of the input 
 schedule as well as calculating the times for the jobs' execution is fundamentally most important.
 
-As mentioned before, this package exposes a [`Parse` function](./schedule/cronlex/process.go#L46) that consumes a cron 
-string returning a [`Schedule`](./schedule/cronlex/process.go#L33) and an error:
+As mentioned before, this package exposes a [`Parse` function](./schedule/cronlex/process.go#L69) that consumes a cron 
+string returning a [`Schedule`](./schedule/cronlex/process.go#L56) and an error:
 
 ```go
 func Parse(cron string) (s Schedule, err error)
@@ -470,7 +470,7 @@ The tokens also hold the value (bytes) that represent them.
 - A parser, which consumes the tokens as they are emitted from the lexer, and progressively builds an abstract syntax 
 tree that is the cron schedule and its different nodes.
 - A processor, which consumes the finalized abstract syntax tree created by the parser, validates its contents and 
-creates the appropriate [`Schedule`](./schedule/cronlex/process.go#L33).
+creates the appropriate [`Schedule`](./schedule/cronlex/process.go#L56).
 
 The implementations of the underlying lexer and parser logic are taken from Go's standard library, from its 
 [`go/token`](https://pkg.go.dev/go/token) and [`text/template`](https://pkg.go.dev/text/template) packages. There is 
@@ -514,7 +514,7 @@ look like:
 ```
 
 Having created the cron's abstract syntax tree we arrive to the last phase, the 
-[`ProcessFunc` function](./schedule/cronlex/process.go#L59). It starts off by validating the contents in the abstract 
+[`ProcessFunc` function](./schedule/cronlex/process.go#L82). It starts off by validating the contents in the abstract 
 syntax tree to ensure there are no unsupported values like greater than the maximum, etc.
 
 Once ensured it is valid, the function checks how many nodes are children of the root node in the tree, with support for
@@ -526,16 +526,16 @@ Once ensured it is valid, the function checks how many nodes are children of the
 Handling the exceptions is very simple as the function only switches on the supported values looking for a match. The 
 switch statement is the fastest algorithm to perform this check. 
 
-A _classic_ cron string with 5 nodes will still have a seconds [`Resolver`](./schedule/cronlex/process.go#L26) in its 
-[`Schedule`](./schedule/cronlex/process.go#L33), by configuring it as a
+A _classic_ cron string with 5 nodes will still have a seconds [`Resolver`](./schedule/cronlex/process.go#L49) in its 
+[`Schedule`](./schedule/cronlex/process.go#L56), by configuring it as a
 [`FixedSchedule` type](./schedule/resolve/resolve.go#L13), triggering at value 0 with a maximum of 59 (for seconds). 
 
 Generally, the Resolver types for each node from both _classic_ and _extended_ cron strings are built by checking
-if it's a star (`*`) or alphanumeric node, creating the appropriate [`Resolver`](./schedule/cronlex/process.go#L26). 
+if it's a star (`*`) or alphanumeric node, creating the appropriate [`Resolver`](./schedule/cronlex/process.go#L49). 
 Note that step values are sorted and compacted before being returned, for optimal efficiency when being used.
 
 Lastly, considering the weekday support for 0 and 7 as Sundays, if the weekday 
-[`Resolver`](./schedule/cronlex/process.go#L26) is a 
+[`Resolver`](./schedule/cronlex/process.go#L49) is a 
 [`StepSchedule` type](./schedule/resolve/resolve.go#L42), it is normalized as a 0 value.
 
 
@@ -550,7 +550,7 @@ insight on how the cron service is set up from a `main.go` / script-like approac
 
 You can also take a look 
 [at its `runner.go` file](https://github.com/zalgonoise/x/blob/master/steam/cmd/steam/monitor/runner.go), that 
-implements the [`executor.Runner`](./executor/executor.go#L40) interface.
+implements the [`executor.Runner`](./executor/executor.go#L41) interface.
 
 _______
 
