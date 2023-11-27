@@ -48,19 +48,19 @@ func TestNewExecutor(t *testing.T) {
 	for _, testcase := range []struct {
 		name string
 		id   string
-		opts []cfg.Option[executor.Config]
+		opts []cfg.Option[*executor.Config]
 		err  error
 	}{
 		{
 			name: "DefaultID",
-			opts: []cfg.Option[executor.Config]{
+			opts: []cfg.Option[*executor.Config]{
 				executor.WithSchedule(cron),
 				executor.WithRunners(testRunner{}),
 			},
 		},
 		{
 			name: "CustomScheduler",
-			opts: []cfg.Option[executor.Config]{
+			opts: []cfg.Option[*executor.Config]{
 				executor.WithScheduler(sched),
 				executor.WithRunners(testRunner{}),
 			},

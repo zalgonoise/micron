@@ -31,120 +31,120 @@ func TestConfig(t *testing.T) {
 
 	for _, testcase := range []struct {
 		name string
-		opts []cfg.Option[Config]
+		opts []cfg.Option[*Config]
 	}{
 		{
 			name: "WithRunners/NoRunners",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithRunners(),
 			},
 		},
 		{
 			name: "WithRunners/NilRunner",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithRunners(nil),
 			},
 		},
 		{
 			name: "WithRunners/OneRunner",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithRunners(runner),
 			},
 		},
 		{
 			name: "WithRunners/AddRunner",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithRunners(runner),
 				WithRunners(runner),
 			},
 		},
 		{
 			name: "WithScheduler/NoScheduler",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithScheduler(nil),
 			},
 		},
 		{
 			name: "WithScheduler/OneScheduler",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithScheduler(testScheduler{}),
 			},
 		},
 		{
 			name: "WithSchedule/EmptyString",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithSchedule(""),
 			},
 		},
 		{
 			name: "WithSchedule/WithCronString",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithSchedule(cron),
 			},
 		},
 		{
 			name: "WithLocation/NilLocation",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLocation(nil),
 			},
 		},
 		{
 			name: "WithLocation/Local",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLocation(time.Local),
 			},
 		},
 		{
 			name: "WithMetrics/NilMetrics",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(nil),
 			},
 		},
 		{
 			name: "WithMetrics/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(metrics.NoOp()),
 			},
 		},
 		{
 			name: "WithLogger/NilLogger",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(nil),
 			},
 		},
 		{
 			name: "WithLogger/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(slog.New(log.NoOp())),
 			},
 		},
 		{
 			name: "WithLogHandler/NilHandler",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(nil),
 			},
 		},
 		{
 			name: "WithLogHandler/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(log.NoOp()),
 			},
 		},
 		{
 			name: "WithTrace/NilTracer",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(nil),
 			},
 		},
 		{
 			name: "WithTrace/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
 			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_ = cfg.New(testcase.opts...)
+			_ = cfg.Set(new(Config), testcase.opts...)
 		})
 	}
 }
@@ -224,6 +224,8 @@ func TestExecutorWithLogs(t *testing.T) {
 
 			_ = e.ID()
 			_ = e.Next(ctx)
+
+			//nolint:errcheck // unit test with no-ops configured
 			_ = e.Exec(ctx)
 
 			switch exec := e.(type) {
@@ -241,7 +243,6 @@ func TestExecutorWithLogs(t *testing.T) {
 				}
 
 				is.Equal(t, wants.logger.Handler(), exec.logger.Handler())
-
 			}
 		})
 	}
@@ -322,6 +323,8 @@ func TestExecutorWithMetrics(t *testing.T) {
 
 			_ = e.ID()
 			_ = e.Next(ctx)
+
+			//nolint:errcheck // unit test with no-ops configured
 			_ = e.Exec(ctx)
 
 			switch sched := e.(type) {
@@ -398,6 +401,8 @@ func TestExecutorWithTrace(t *testing.T) {
 
 			_ = e.ID()
 			_ = e.Next(ctx)
+
+			//nolint:errcheck // unit test with no-ops configured
 			_ = e.Exec(ctx)
 
 			switch sched := e.(type) {
@@ -429,7 +434,7 @@ func TestNew(t *testing.T) {
 
 	for _, testcase := range []struct {
 		name string
-		conf []cfg.Option[Config]
+		conf []cfg.Option[*Config]
 		err  error
 	}{
 		{
@@ -438,14 +443,14 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name: "NoSchedulerOrCronString",
-			conf: []cfg.Option[Config]{
+			conf: []cfg.Option[*Config]{
 				WithRunners(r),
 			},
 			err: ErrEmptyScheduler,
 		},
 		{
 			name: "InvalidCronString",
-			conf: []cfg.Option[Config]{
+			conf: []cfg.Option[*Config]{
 				WithRunners(r),
 				WithSchedule(cron),
 			},
