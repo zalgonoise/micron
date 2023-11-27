@@ -10,6 +10,29 @@ import (
 	"github.com/zalgonoise/micron/schedule/resolve"
 )
 
+const (
+	maxSec     = 59
+	maxMin     = 59
+	maxHour    = 23
+	maxDay     = 31
+	maxMonth   = 12
+	maxWeekday = 7
+
+	extraSunday = 7
+
+	double = 2
+)
+
+const (
+	reboot = iota
+	hourly
+	daily
+	weekly
+	monthly
+	yearly
+	annually
+)
+
 // Resolver describes the capabilities of a cron schedule resolver.
 //
 // Implementations of Resolver should focus on calculating the difference until the
@@ -43,9 +66,9 @@ type Schedule struct {
 //
 // Before parsing the string, this function validates that the cron string does not contain any illegal characters,
 // before actually scanning and processing it.
-func Parse(cron string) (s Schedule, err error) {
-	if err = validateCharacters(cron); err != nil {
-		return s, err
+func Parse(cron string) (Schedule, error) {
+	if err := validateCharacters(cron); err != nil {
+		return Schedule{}, err
 	}
 
 	return parse.Run([]byte(cron), StateFunc, ParseFunc, ProcessFunc)
@@ -56,20 +79,23 @@ func Parse(cron string) (s Schedule, err error) {
 //
 // This sequence will validate the nodes in the input parse.Tree, returning an error if raised. Then, depending on the
 // configured top-level nodes, it will process the tree in the correct, supported way to derive a Schedule out of it.
-func ProcessFunc(t *parse.Tree[Token, byte]) (s Schedule, err error) {
-	if err = Validate(t); err != nil {
-		return s, err
+func ProcessFunc(t *parse.Tree[Token, byte]) (Schedule, error) {
+	if err := Validate(t); err != nil {
+		return Schedule{}, err
 	}
 
-	nodes := t.List()
+	var (
+		s     Schedule
+		nodes = t.List()
+	)
 
 	switch len(nodes) {
-	case 1:
+	case override:
 		return buildException(nodes[0]), nil
-	case 5:
+	case noSeconds:
 		s = Schedule{
 			Sec: resolve.FixedSchedule{
-				Max: 59,
+				Max: maxSec,
 				At:  0,
 			},
 			Min:      buildMinutes(nodes[0]),
@@ -78,7 +104,7 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (s Schedule, err error) {
 			Month:    buildMonths(nodes[3]),
 			DayWeek:  buildWeekdays(nodes[4]),
 		}
-	case 6:
+	case withSeconds:
 		s = Schedule{
 			Sec:      buildSeconds(nodes[0]),
 			Min:      buildMinutes(nodes[1]),
@@ -91,7 +117,7 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (s Schedule, err error) {
 	// convert sundays as 7 into a 0
 	if r, ok := s.DayWeek.(resolve.StepSchedule); ok {
 		for i := range r.Steps {
-			if r.Steps[i] == 7 {
+			if r.Steps[i] == extraSunday {
 				r.Steps[i] = 0
 
 				slices.Sort(r.Steps)
@@ -106,61 +132,61 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (s Schedule, err error) {
 func buildSeconds(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 0, 59)
+		return processStar(node, 0, maxSec)
 	default:
-		return processAlphaNum(node, 59, nil)
+		return processAlphaNum(node, maxSec, nil)
 	}
 }
 
 func buildMinutes(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 0, 59)
+		return processStar(node, 0, maxMin)
 	default:
-		return processAlphaNum(node, 59, nil)
+		return processAlphaNum(node, maxMin, nil)
 	}
 }
 
 func buildHours(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 0, 23)
+		return processStar(node, 0, maxHour)
 	default:
-		return processAlphaNum(node, 23, nil)
+		return processAlphaNum(node, maxHour, nil)
 	}
 }
 
 func buildMonthDays(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 1, 31)
+		return processStar(node, 1, maxDay)
 	default:
-		return processAlphaNum(node, 31, nil)
+		return processAlphaNum(node, maxDay, nil)
 	}
 }
 
 func buildMonths(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 1, 12)
+		return processStar(node, 1, maxMonth)
 	default:
-		return processAlphaNum(node, 12, monthsList)
+		return processAlphaNum(node, maxMonth, monthsList)
 	}
 }
 
 func buildWeekdays(node *parse.Node[Token, byte]) Resolver {
 	switch node.Type {
 	case TokenStar:
-		return processStar(node, 0, 7)
+		return processStar(node, 0, maxWeekday)
 	default:
-		return processAlphaNum(node, 7, weekdaysList)
+		return processAlphaNum(node, maxWeekday, weekdaysList)
 	}
 }
 
 func defaultSchedule() Schedule {
 	return Schedule{
-		Sec:      resolve.FixedSchedule{Max: 59, At: 0},
-		Min:      resolve.FixedSchedule{Max: 59, At: 0},
+		Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
+		Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 		Hour:     resolve.Everytime{},
 		DayMonth: resolve.Everytime{},
 		Month:    resolve.Everytime{},
@@ -176,45 +202,45 @@ func buildException(node *parse.Node[Token, byte]) Schedule {
 	value := getValue(node.Edges[0], exceptionsList)
 	switch value {
 	// TODO: implement reboot (case 0:)
-	case 0: // reboot
+	case reboot:
 		return defaultSchedule()
-	case 2: // daily
+	case daily:
 		return Schedule{
-			Sec:      resolve.FixedSchedule{Max: 59, At: 0},
-			Min:      resolve.FixedSchedule{Max: 59, At: 0},
-			Hour:     resolve.FixedSchedule{Max: 23, At: 0},
+			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
+			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
+			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
 			DayMonth: resolve.Everytime{},
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
 		}
-	case 3: // weekly
+	case weekly:
 		return Schedule{
-			Sec:      resolve.FixedSchedule{Max: 59, At: 0},
-			Min:      resolve.FixedSchedule{Max: 59, At: 0},
-			Hour:     resolve.FixedSchedule{Max: 23, At: 0},
+			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
+			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
+			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
 			DayMonth: resolve.Everytime{},
 			Month:    resolve.Everytime{},
 			DayWeek: resolve.FixedSchedule{
-				Max: 6,
+				Max: maxWeekday,
 				At:  0,
 			},
 		}
-	case 4: // monthly
+	case monthly:
 		return Schedule{
-			Sec:      resolve.FixedSchedule{Max: 59, At: 0},
-			Min:      resolve.FixedSchedule{Max: 59, At: 0},
-			Hour:     resolve.FixedSchedule{Max: 23, At: 0},
-			DayMonth: resolve.FixedSchedule{Max: 31, At: 1},
+			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
+			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
+			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
+			DayMonth: resolve.FixedSchedule{Max: maxDay, At: 1},
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
 		}
-	case 5, 6: // yearly, annually
+	case yearly, annually:
 		return Schedule{
-			Sec:      resolve.FixedSchedule{Max: 59, At: 0},
-			Min:      resolve.FixedSchedule{Max: 59, At: 0},
-			Hour:     resolve.FixedSchedule{Max: 23, At: 0},
-			DayMonth: resolve.FixedSchedule{Max: 31, At: 1},
-			Month:    resolve.FixedSchedule{Max: 12, At: 1},
+			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
+			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
+			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
+			DayMonth: resolve.FixedSchedule{Max: maxDay, At: 1},
+			Month:    resolve.FixedSchedule{Max: maxMonth, At: 1},
 			DayWeek:  resolve.Everytime{},
 		}
 	default:
@@ -277,14 +303,14 @@ func processAlphaNum(n *parse.Node[Token, byte], maximum int, valueList []string
 			}
 		}
 
-		stepValues := make([]int, 0, len(n.Edges)*2)
+		stepValues := make([]int, 0, len(n.Edges)*double)
 
 		// on a mixed scenario we walk through the edges and build a step-schedule out of the combinations provided
 		// for reference, TokenDash means a range, TokenSlash means a frequency and TokenComma carries the next value
 		//
 		// the value variable is reused for this purpose
-
 		for i := range n.Edges {
+			//nolint:exhaustive // no need to check on all token types
 			switch n.Edges[i].Type {
 			case TokenComma:
 				// don't leave the initial value dangling when changing Tokens

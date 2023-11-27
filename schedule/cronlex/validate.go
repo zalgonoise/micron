@@ -33,6 +33,12 @@ const (
 	ErrWeekDays  = errs.Entity("days of the week value")
 )
 
+const (
+	override    = 1
+	noSeconds   = 5
+	withSeconds = 6
+)
+
 var (
 	ErrEmptyInput          = errs.WithDomain(errDomain, ErrEmpty, ErrInput)
 	ErrInvalidNumNodes     = errs.WithDomain(errDomain, ErrInvalid, ErrNumNodes)
@@ -45,6 +51,7 @@ var (
 	ErrInvalidAlphanum     = errs.WithDomain(errDomain, ErrInvalid, ErrAlphanum)
 	ErrInvalidCharacter    = errs.WithDomain(errDomain, ErrInvalid, ErrCharacter)
 
+	//nolint:gochecknoglobals // immutable slice used in validation
 	monthsList = []string{
 		0:  "",
 		1:  "JAN",
@@ -61,6 +68,7 @@ var (
 		12: "DEC",
 	}
 
+	//nolint:gochecknoglobals // immutable slice used in validation
 	weekdaysList = []string{
 		0: "SUN",
 		1: "MON",
@@ -72,6 +80,7 @@ var (
 		7: "SUN", // non-standard
 	}
 
+	//nolint:gochecknoglobals // immutable slice used in validation
 	exceptionsList = []string{
 		0: "REBOOT",
 		1: "HOURLY",
@@ -100,6 +109,7 @@ func validateCharacters(s string) error {
 			s[i] == '@' {
 			continue
 		}
+
 		return fmt.Errorf("%w: %v -- %q", ErrInvalidCharacter, s[i], s)
 	}
 
@@ -111,9 +121,9 @@ func Validate(t *parse.Tree[Token, byte]) error {
 	nodes := t.List()
 
 	switch len(nodes) {
-	case 1:
+	case override:
 		return validateOverride(nodes[0])
-	case 5:
+	case noSeconds:
 		return errors.Join(
 			validateMinutes(nodes[0]),
 			validateHours(nodes[1]),
@@ -121,7 +131,7 @@ func Validate(t *parse.Tree[Token, byte]) error {
 			validateMonths(nodes[3]),
 			validateWeekDays(nodes[4]),
 		)
-	case 6:
+	case withSeconds:
 		return errors.Join(
 			validateSeconds(nodes[0]),
 			validateMinutes(nodes[1]),
@@ -199,27 +209,25 @@ func validateSymbols(
 	case len(edges) > maxEdges:
 		return fmt.Errorf("%w: %d", ErrInvalidNumEdges, len(edges))
 	default:
-	edgeLoop:
 		for i := range edges {
 			for idx := range validSymbols {
-				if edges[i].Type == validSymbols[idx] {
-					if len(edges[i].Edges) != 1 {
-						return fmt.Errorf("%w: %d", ErrInvalidNumEdges, len(edges[i].Edges))
-					}
-
-					switch edges[i].Edges[0].Type {
-					case TokenAlphaNum:
-					// ok state
-					case TokenError:
-						return fmt.Errorf("%w: %v -- %q", ErrInvalidAlphanum, edges[i].Edges[0].Type, string(edges[i].Edges[0].Value))
-					}
-
-					if err := valueFunc(string(edges[i].Edges[0].Value)); err != nil {
-						return err
-					}
-
-					continue edgeLoop
+				if edges[i].Type != validSymbols[idx] {
+					continue
 				}
+
+				if len(edges[i].Edges) != 1 {
+					return fmt.Errorf("%w: %d", ErrInvalidNumEdges, len(edges[i].Edges))
+				}
+
+				if edges[i].Edges[0].Type == TokenError {
+					return fmt.Errorf("%w: %v -- %q", ErrInvalidAlphanum, edges[i].Edges[0].Type, string(edges[i].Edges[0].Value))
+				}
+
+				if err := valueFunc(string(edges[i].Edges[0].Value)); err != nil {
+					return err
+				}
+
+				break
 			}
 		}
 
@@ -239,7 +247,9 @@ func validateField(node *parse.Node[Token, byte], maxEdges, minimum, maximum int
 	case TokenAlphaNum:
 		err := validateNumber(string(node.Value), minimum, maximum)
 
-		if symbolErr := validateSymbols(node.Edges, maxEdges, []Token{TokenAlphaNum, TokenSlash, TokenComma, TokenDash}, valueFunc); symbolErr != nil {
+		if symbolErr := validateSymbols(
+			node.Edges, maxEdges, []Token{TokenAlphaNum, TokenSlash, TokenComma, TokenDash}, valueFunc,
+		); symbolErr != nil {
 			return errors.Join(err, symbolErr)
 		}
 
@@ -261,8 +271,8 @@ func validateField(node *parse.Node[Token, byte], maxEdges, minimum, maximum int
 }
 
 func validateSeconds(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 60, 0, 59, func(s string) error {
-		return validateNumber(s, 0, 59)
+	if err := validateField(node, maxSec+1, 0, maxSec, func(s string) error {
+		return validateNumber(s, 0, maxSec)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrMinutes)
 	}
@@ -271,8 +281,8 @@ func validateSeconds(node *parse.Node[Token, byte]) error {
 }
 
 func validateMinutes(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 60, 0, 59, func(s string) error {
-		return validateNumber(s, 0, 59)
+	if err := validateField(node, maxMin+1, 0, maxMin, func(s string) error {
+		return validateNumber(s, 0, maxMin)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrMinutes)
 	}
@@ -281,8 +291,8 @@ func validateMinutes(node *parse.Node[Token, byte]) error {
 }
 
 func validateHours(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 24, 0, 23, func(s string) error {
-		return validateNumber(s, 0, 23)
+	if err := validateField(node, maxHour+1, 0, maxHour, func(s string) error {
+		return validateNumber(s, 0, maxHour)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrHours)
 	}
@@ -291,8 +301,8 @@ func validateHours(node *parse.Node[Token, byte]) error {
 }
 
 func validateMonthDays(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 31, 1, 31, func(s string) error {
-		return validateNumber(s, 1, 31)
+	if err := validateField(node, maxDay, 1, maxDay, func(s string) error {
+		return validateNumber(s, 1, maxDay)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrMonthDays)
 	}
@@ -301,8 +311,8 @@ func validateMonthDays(node *parse.Node[Token, byte]) error {
 }
 
 func validateMonths(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 12, 1, 12, func(s string) error {
-		return validateAlpha(s, 1, 12, monthsList)
+	if err := validateField(node, maxMonth, 1, maxMonth, func(s string) error {
+		return validateAlpha(s, 1, maxMonth, monthsList)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrMonths)
 	}
@@ -311,8 +321,8 @@ func validateMonths(node *parse.Node[Token, byte]) error {
 }
 
 func validateWeekDays(node *parse.Node[Token, byte]) error {
-	if err := validateField(node, 7, 0, 7, func(s string) error {
-		return validateAlpha(s, 0, 7, weekdaysList)
+	if err := validateField(node, maxWeekday, 0, maxWeekday, func(s string) error {
+		return validateAlpha(s, 0, maxWeekday, weekdaysList)
 	}); err != nil {
 		return fmt.Errorf("%w (%w)", err, ErrWeekDays)
 	}

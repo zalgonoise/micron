@@ -60,6 +60,7 @@ func stateAlphanumeric(l lex.Lexer[Token, byte]) lex.StateFn[Token, byte] {
 
 			continue
 		}
+
 		break
 	}
 
@@ -79,6 +80,7 @@ func stateException(l lex.Lexer[Token, byte]) lex.StateFn[Token, byte] {
 
 			continue
 		}
+
 		break
 	}
 
