@@ -86,7 +86,7 @@ func newValueRange(from, to, frequency int) []int {
 		return []int{}
 	}
 
-	var r = make([]int, 0, to-from/frequency)
+	r := make([]int, 0, to-from/frequency)
 
 	for i := from; i <= to; i += frequency {
 		r = append(r, i)
