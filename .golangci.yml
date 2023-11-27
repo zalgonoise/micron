@@ -19,7 +19,7 @@ linters-settings:
     sections:
       - standard
       - default
-      - prefix(github.com/zalgonoise)
+      - prefix(github.com/zalgonoise/micron)
   gofmt:
     # simplify code: gofmt with `-s` option, true by default
     simplify: true
@@ -41,9 +41,9 @@ linters-settings:
       all:
         deny:
           - pkg: github.com/sirupsen/logrus
-            desc: logging is done using the internal/log package
-          - pkg: log
-            desc: logging is done using the internal/log package
+            desc: logging is done using the log/slog package
+          - pkg: github.com/uber-go/zap
+            desc: logging is done using the log/slog package
   misspell:
   #locale: US
   lll:
@@ -204,7 +204,6 @@ linters:
     - unused
     - whitespace
     - gochecknoglobals
-    - goerr113
     - prealloc
     - asciicheck
     - nestif
