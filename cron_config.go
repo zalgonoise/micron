@@ -12,6 +12,7 @@ import (
 
 const (
 	minBufferSize     = 64
+	minAlloc          = 64
 	defaultBufferSize = 1024
 )
 
@@ -29,12 +30,12 @@ type Config struct {
 //
 // This call returns a cfg.NoOp cfg.Option if the input selector.Selector is nil, or if it is a
 // selector.NoOp type.
-func WithSelector(sel selector.Selector) cfg.Option[Config] {
+func WithSelector(sel selector.Selector) cfg.Option[*Config] {
 	if sel == nil || sel == selector.NoOp() {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.sel = sel
 
 		return config
@@ -51,9 +52,9 @@ func WithSelector(sel selector.Selector) cfg.Option[Config] {
 //
 // Note: this call is only valid if when creating a new Runtime via the New function, no WithSelector option is
 // supplied; only WithJob. A call to New supports multiple WithJob cfg.Option.
-func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[Config] {
+func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[*Config] {
 	if len(runners) == 0 {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
 	if id == "" {
@@ -65,12 +66,12 @@ func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[Config] {
 		executor.WithRunners(runners...),
 	)
 	if err != nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		if config.execs == nil {
-			config.execs = make([]executor.Executor, 0, 64)
+			config.execs = make([]executor.Executor, 0, minAlloc)
 		}
 
 		config.execs = append(config.execs, exec)
@@ -81,12 +82,12 @@ func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[Config] {
 
 // WithErrorBufferSize defines the capacity of the error channel that the Runtime exposes in
 // its Runtime.Err method.
-func WithErrorBufferSize(size int) cfg.Option[Config] {
+func WithErrorBufferSize(size int) cfg.Option[*Config] {
 	if size < 0 {
 		size = defaultBufferSize
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.errBufferSize = size
 
 		return config
@@ -94,12 +95,12 @@ func WithErrorBufferSize(size int) cfg.Option[Config] {
 }
 
 // WithMetrics decorates the Runtime with the input metrics registry.
-func WithMetrics(m Metrics) cfg.Option[Config] {
+func WithMetrics(m Metrics) cfg.Option[*Config] {
 	if m == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.metrics = m
 
 		return config
@@ -107,12 +108,12 @@ func WithMetrics(m Metrics) cfg.Option[Config] {
 }
 
 // WithLogger decorates the Runtime with the input logger.
-func WithLogger(logger *slog.Logger) cfg.Option[Config] {
+func WithLogger(logger *slog.Logger) cfg.Option[*Config] {
 	if logger == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.handler = logger.Handler()
 
 		return config
@@ -120,12 +121,12 @@ func WithLogger(logger *slog.Logger) cfg.Option[Config] {
 }
 
 // WithLogHandler decorates the Runtime with logging using the input log handler.
-func WithLogHandler(handler slog.Handler) cfg.Option[Config] {
+func WithLogHandler(handler slog.Handler) cfg.Option[*Config] {
 	if handler == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.handler = handler
 
 		return config
@@ -133,12 +134,12 @@ func WithLogHandler(handler slog.Handler) cfg.Option[Config] {
 }
 
 // WithTrace decorates the Runtime with the input trace.Tracer.
-func WithTrace(tracer trace.Tracer) cfg.Option[Config] {
+func WithTrace(tracer trace.Tracer) cfg.Option[*Config] {
 	if tracer == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.tracer = tracer
 
 		return config

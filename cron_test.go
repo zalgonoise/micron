@@ -22,89 +22,89 @@ import (
 func TestConfig(t *testing.T) {
 	for _, testcase := range []struct {
 		name string
-		opts []cfg.Option[Config]
+		opts []cfg.Option[*Config]
 	}{
 		{
 			name: "WithSelector/NilSelector",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithSelector(nil),
 			},
 		},
 		{
 			name: "WithSelector/NoOpSelector",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithSelector(selector.NoOp()),
 			},
 		},
 		{
 			name: "WithErrorBufferSize/Zero",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithErrorBufferSize(0),
 			},
 		},
 		{
 			name: "WithErrorBufferSize/Ten",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithErrorBufferSize(10),
 			},
 		},
 		{
 			name: "WithErrorBufferSize/Negative",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithErrorBufferSize(-10),
 			},
 		},
 		{
 			name: "WithMetrics/NilMetrics",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(nil),
 			},
 		},
 		{
 			name: "WithMetrics/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(metrics.NoOp()),
 			},
 		},
 		{
 			name: "WithLogger/NilLogger",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(nil),
 			},
 		},
 		{
 			name: "WithLogger/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(slog.New(log.NoOp())),
 			},
 		},
 		{
 			name: "WithLogHandler/NilHandler",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(nil),
 			},
 		},
 		{
 			name: "WithLogHandler/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(log.NoOp()),
 			},
 		},
 		{
 			name: "WithTrace/NilTracer",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(nil),
 			},
 		},
 		{
 			name: "WithTrace/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
 			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_ = cfg.New(testcase.opts...)
+			_ = cfg.Set(new(Config), testcase.opts...)
 		})
 	}
 }
@@ -435,7 +435,7 @@ func TestNewWithJob(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			jobs := make([]cfg.Option[Config], 0, len(testcase.jobs))
+			jobs := make([]cfg.Option[*Config], 0, len(testcase.jobs))
 
 			for i := range testcase.jobs {
 				jobs = append(jobs, WithJob(
