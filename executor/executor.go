@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	defaultID    = "micron.executor"
-	bufferPeriod = 100 * time.Millisecond
+	cronAndLocAlloc = 2
+	defaultID       = "micron.executor"
+	bufferPeriod    = 100 * time.Millisecond
 
 	errDomain = errs.Domain("micron/executor")
 
@@ -119,6 +120,7 @@ func (e Executable) Exec(ctx context.Context) error {
 	now := time.Now()
 	next := e.cron.Next(execCtx, now)
 	timer := time.NewTimer(next.Sub(now))
+
 	defer timer.Stop()
 
 	for {
@@ -157,8 +159,8 @@ func (e Executable) ID() string {
 // WithScheduler option -- alternatively, callers can simply pass a cron string directly using the WithSchedule option.
 //
 // If an ID is not supplied, then the default ID of `micron.executor` is set.
-func New(id string, options ...cfg.Option[Config]) (Executor, error) {
-	config := cfg.New(options...)
+func New(id string, options ...cfg.Option[*Config]) (Executor, error) {
+	config := cfg.Set(new(Config), options...)
 
 	exec, err := newExecutable(id, config)
 	if err != nil {
@@ -180,7 +182,7 @@ func New(id string, options ...cfg.Option[Config]) (Executor, error) {
 	return exec, nil
 }
 
-func newExecutable(id string, config Config) (Executor, error) {
+func newExecutable(id string, config *Config) (Executor, error) {
 	// validate input
 	if id == "" {
 		id = defaultID
@@ -195,13 +197,14 @@ func newExecutable(id string, config Config) (Executor, error) {
 	}
 
 	var sched schedule.Scheduler
+
 	switch {
 	case config.scheduler != nil:
 		// scheduler is provided, ignore cron string and location
 		sched = config.scheduler
 	default:
 		// create a new scheduler from config
-		opts := make([]cfg.Option[schedule.Config], 0, 2)
+		opts := make([]cfg.Option[schedule.Config], 0, cronAndLocAlloc)
 
 		if config.cron != "" {
 			opts = append(opts, schedule.WithSchedule(config.cron))
@@ -227,7 +230,7 @@ func newExecutable(id string, config Config) (Executor, error) {
 	}, nil
 }
 
-// NoOp returns a no-op Executor
+// NoOp returns a no-op Executor.
 func NoOp() Executor {
 	return noOpExecutor{}
 }

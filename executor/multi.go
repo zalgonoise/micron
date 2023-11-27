@@ -23,6 +23,7 @@ func Multi(ctx context.Context, execs ...Executor) error {
 		e := execs[i]
 
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 
