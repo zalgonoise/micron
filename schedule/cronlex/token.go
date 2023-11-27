@@ -15,6 +15,7 @@ const (
 	TokenSpace
 )
 
+//nolint:gochecknoglobals // immutable array used in the fmt.Stringer implementation
 var tokenStrings = [...]string{
 	"TokenEOF",
 	"TokenError",

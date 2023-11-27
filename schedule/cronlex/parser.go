@@ -37,8 +37,7 @@ func parseAt(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte] {
 	case TokenAlphaNum:
 		return parseAlphanum
 	default:
-		item := t.Next()
-		item.Type = TokenError
+		//nolint:errcheck // call will not return a meaningful error; tree is still validated in the end
 		_ = t.Set(t.Parent())
 
 		return ParseFunc
@@ -50,6 +49,7 @@ func parseStar(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte] {
 
 	switch t.Peek().Type {
 	case TokenSpace:
+		//nolint:errcheck // call will not return a meaningful error; tree is still validated in the end
 		_ = t.Set(t.Parent())
 		t.Next()
 
@@ -57,6 +57,7 @@ func parseStar(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte] {
 	case TokenSlash:
 		return parseAlphanum
 	default:
+		//nolint:errcheck // call will not return a meaningful error; tree is still validated in the end
 		_ = t.Set(t.Parent())
 
 		return nil
@@ -69,6 +70,7 @@ func parseAlphanumSymbols(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte]
 	switch t.Peek().Type {
 	case TokenAlphaNum:
 		t.Node(t.Next())
+		//nolint:errcheck // call will not return a meaningful error; tree is still validated in the end
 		_ = t.Set(t.Parent().Parent)
 
 		return parseAlphanum
@@ -82,6 +84,7 @@ func parseAlphanumSymbols(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte]
 }
 
 func parseAlphanum(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte] {
+	//nolint:exhaustive // no need to check on all token types
 	switch t.Peek().Type {
 	case TokenAlphaNum:
 		t.Node(t.Next())
@@ -90,6 +93,7 @@ func parseAlphanum(t *parse.Tree[Token, byte]) parse.ParseFn[Token, byte] {
 	case TokenComma, TokenDash, TokenSlash:
 		return parseAlphanumSymbols
 	case TokenSpace:
+		//nolint:errcheck // call will not return a meaningful error; tree is still validated in the end
 		_ = t.Set(t.Parent())
 		t.Next()
 
