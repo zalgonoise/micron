@@ -116,6 +116,7 @@ func (s selector) next(ctx context.Context) []executor.Executor {
 		switch {
 		case i == 0:
 			next = t
+
 			exec = append(exec, s.exec[i])
 
 			continue
@@ -139,8 +140,8 @@ func (s selector) next(ctx context.Context) []executor.Executor {
 //
 // Creating a Selector requires at least one executor.Executor, which can be added through the WithExecutors option. To
 // allow this configuration to be variadic as well, it is served as a cfg.Option.
-func New(options ...cfg.Option[Config]) (Selector, error) {
-	config := cfg.New(options...)
+func New(options ...cfg.Option[*Config]) (Selector, error) {
+	config := cfg.Set(new(Config), options...)
 
 	sel, err := newSelector(config)
 	if err != nil {
@@ -162,7 +163,7 @@ func New(options ...cfg.Option[Config]) (Selector, error) {
 	return sel, nil
 }
 
-func newSelector(config Config) (Selector, error) {
+func newSelector(config *Config) (Selector, error) {
 	if len(config.exec) == 0 {
 		return noOpSelector{}, ErrEmptyExecutorsList
 	}
@@ -183,7 +184,7 @@ func newSelector(config Config) (Selector, error) {
 	}, nil
 }
 
-// NoOp returns a no-op Selector
+// NoOp returns a no-op Selector.
 func NoOp() Selector {
 	return noOpSelector{}
 }

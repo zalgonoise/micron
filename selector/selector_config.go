@@ -24,8 +24,9 @@ type Config struct {
 //
 // This call returns a cfg.NoOp cfg.Option if the input set of executor.Executor is empty, or contains
 // only nil and / or no-op executor.Executor.
-func WithExecutors(executors ...executor.Executor) cfg.Option[Config] {
+func WithExecutors(executors ...executor.Executor) cfg.Option[*Config] {
 	execs := make([]executor.Executor, 0, len(executors))
+
 	for i := range executors {
 		if executors[i] == nil || executors[i] == executor.NoOp() {
 			continue
@@ -35,10 +36,10 @@ func WithExecutors(executors ...executor.Executor) cfg.Option[Config] {
 	}
 
 	if len(execs) == 0 {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		if len(config.exec) == 0 {
 			config.exec = execs
 
@@ -58,8 +59,8 @@ func WithExecutors(executors ...executor.Executor) cfg.Option[Config] {
 // times out.
 //
 // WithBlock waits until the execution is done, so an accurate error value is returned from the Selector.
-func WithBlock() cfg.Option[Config] {
-	return cfg.Register(func(config Config) Config {
+func WithBlock() cfg.Option[*Config] {
+	return cfg.Register(func(config *Config) *Config {
 		config.block = true
 
 		return config
@@ -71,12 +72,12 @@ func WithBlock() cfg.Option[Config] {
 //
 // By default, the local context timeout is set to one second. Any negative or zero duration values result in a cfg.NoOp
 // cfg.Option being returned.
-func WithTimeout(dur time.Duration) cfg.Option[Config] {
+func WithTimeout(dur time.Duration) cfg.Option[*Config] {
 	if dur <= 0 {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.timeout = dur
 
 		return config
@@ -84,12 +85,12 @@ func WithTimeout(dur time.Duration) cfg.Option[Config] {
 }
 
 // WithMetrics decorates the Selector with the input metrics registry.
-func WithMetrics(m Metrics) cfg.Option[Config] {
+func WithMetrics(m Metrics) cfg.Option[*Config] {
 	if m == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.metrics = m
 
 		return config
@@ -97,12 +98,12 @@ func WithMetrics(m Metrics) cfg.Option[Config] {
 }
 
 // WithLogger decorates the Selector with the input logger.
-func WithLogger(logger *slog.Logger) cfg.Option[Config] {
+func WithLogger(logger *slog.Logger) cfg.Option[*Config] {
 	if logger == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.handler = logger.Handler()
 
 		return config
@@ -110,12 +111,12 @@ func WithLogger(logger *slog.Logger) cfg.Option[Config] {
 }
 
 // WithLogHandler decorates the Selector with logging using the input log handler.
-func WithLogHandler(handler slog.Handler) cfg.Option[Config] {
+func WithLogHandler(handler slog.Handler) cfg.Option[*Config] {
 	if handler == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.handler = handler
 
 		return config
@@ -123,12 +124,12 @@ func WithLogHandler(handler slog.Handler) cfg.Option[Config] {
 }
 
 // WithTrace decorates the Selector with the input trace.Tracer.
-func WithTrace(tracer trace.Tracer) cfg.Option[Config] {
+func WithTrace(tracer trace.Tracer) cfg.Option[*Config] {
 	if tracer == nil {
-		return cfg.NoOp[Config]{}
+		return cfg.NoOp[*Config]{}
 	}
 
-	return cfg.Register(func(config Config) Config {
+	return cfg.Register(func(config *Config) *Config {
 		config.tracer = tracer
 
 		return config
