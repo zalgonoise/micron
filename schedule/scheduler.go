@@ -5,11 +5,15 @@ import (
 	"time"
 
 	"github.com/zalgonoise/cfg"
+
 	"github.com/zalgonoise/micron/schedule/cronlex"
 	"github.com/zalgonoise/micron/schedule/resolve"
 )
 
-var fixedSeconds = resolve.FixedSchedule{Max: 59, At: 0}
+const maxSec = 59
+
+//nolint:gochecknoglobals // immutable instance of resolve.FixedSchedule for a fixed seconds schedule
+var fixedSeconds = resolve.FixedSchedule{Max: maxSec, At: 0}
 
 // Scheduler describes the capabilities of a cron job scheduler. Its sole responsibility is to provide
 // the timestamp for the next job's execution, after calculating its frequency from its configuration.
@@ -37,7 +41,7 @@ type CronSchedule struct {
 }
 
 // Next calculates and returns the following scheduled time, from the input time.Time.
-func (s CronSchedule) Next(_ context.Context, t time.Time) time.Time {
+func (s *CronSchedule) Next(_ context.Context, t time.Time) time.Time {
 	year, month, day := t.Date()
 	hour := t.Hour()
 	minute := t.Minute()
@@ -125,7 +129,7 @@ func newScheduler(config Config) (Scheduler, error) {
 		config.loc = time.Local
 	}
 
-	return CronSchedule{
+	return &CronSchedule{
 		Loc:      config.loc,
 		Schedule: sched,
 	}, nil
