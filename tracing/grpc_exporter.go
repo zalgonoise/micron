@@ -31,6 +31,14 @@ func GRPCExporter(url string, options ...cfg.Option[Config]) (sdktrace.SpanExpor
 	switch {
 	case config.username != "" && config.password != "":
 		opts = append(opts,
+			// Disable "G402 (CWE-295): TLS MinVersion too low. (Confidence: HIGH, Severity: HIGH)":
+			// Go has a minimum TLS version 1.2 set. By creating an empty tls.Config we're following that minimum version.
+			//
+			// To comply with this linter's rule, we'd need to add a minimum TLS version -- making us revisit the code
+			// on a future Go version where the minimum TLS version is updated (e.g. due to a crypto CVE), or making the app
+			// less robust when preventing transport layer version downgrade attacks
+			//
+			// #nosec G402
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 			grpc.WithPerRPCCredentials(basicAuth{
 				username: config.username,
