@@ -68,43 +68,43 @@ func TestCronSchedule_Next(t *testing.T) {
 			name:  "Success/OneDay/WithDayChange",
 			cron:  "0 0 * * *",
 			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithWeekday/NoWeekends",
 			cron:  "0 0 * * 1-5",
 			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithWeekday/NoWeekendsAndWednesdays",
 			cron:  "0 0 * * 1,2,4,5",
 			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
 			cron:  "0 0 * * 1-2,4-5",
 			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithRangesAndSteps/NoWeekendsAndWednesdays",
 			cron:  "0 0/3,2 * * 1-2,4-5",
 			input: time.Date(2023, 10, 31, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 11, 2, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 11, 2, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithWeekday/NoWeekendsStepSchedule",
 			cron:  "0 0 * * 1,2,3,4,5",
 			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "Success/WithStepSchedule/Every3Hours",
 			cron:  "0 */3 * * *",
 			input: time.Date(2023, 10, 30, 22, 12, 43, 0, time.UTC),
-			wants: time.Date(2023, 10, 31, 00, 0, 0, 0, time.UTC),
+			wants: time.Date(2023, 10, 31, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name: "Success/EveryMinuteFromZeroToFive",
@@ -171,7 +171,7 @@ func TestConfig(t *testing.T) {
 
 func TestSchedulerWithLogs(t *testing.T) {
 	h := slog.NewJSONHandler(io.Discard, nil)
-	s := CronSchedule{
+	s := &CronSchedule{
 		Loc: time.Local,
 		Schedule: cronlex.Schedule{
 			Sec:      resolve.Everytime{},
@@ -246,7 +246,7 @@ func TestSchedulerWithLogs(t *testing.T) {
 			_ = s.Next(ctx, time.Time{})
 
 			switch sched := s.(type) {
-			case CronSchedule, noOpScheduler:
+			case *CronSchedule, noOpScheduler:
 				is.Equal(t, testcase.wants, s)
 			case withLogs:
 				wants, ok := testcase.wants.(withLogs)
@@ -271,7 +271,7 @@ func (testMetrics) IncSchedulerNextCalls() {}
 
 func TestSchedulerWithMetrics(t *testing.T) {
 	m := testMetrics{}
-	s := CronSchedule{
+	s := &CronSchedule{
 		Loc: time.Local,
 		Schedule: cronlex.Schedule{
 			Sec:      resolve.Everytime{},
@@ -352,7 +352,7 @@ func TestSchedulerWithMetrics(t *testing.T) {
 }
 
 func TestSchedulerWithTrace(t *testing.T) {
-	s := CronSchedule{
+	s := &CronSchedule{
 		Loc: time.Local,
 		Schedule: cronlex.Schedule{
 			Sec:      resolve.Everytime{},
