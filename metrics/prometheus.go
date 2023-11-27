@@ -13,7 +13,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const defaultPort = 13003
+const (
+	defaultPort    = 13003
+	defaultTimeout = 15 * time.Second
+)
 
 type Prometheus struct {
 	server *http.Server
@@ -28,28 +31,29 @@ type Prometheus struct {
 	cronUp                   prometheus.Gauge
 }
 
-func (m Prometheus) IncSchedulerNextCalls() {
+func (m *Prometheus) IncSchedulerNextCalls() {
 	m.schedulerNextCount.Inc()
 }
 
-func (m Prometheus) IncSelectorSelectCalls() {
+func (m *Prometheus) IncSelectorSelectCalls() {
 	m.selectorSelectCount.Inc()
 }
 
-func (m Prometheus) IncSelectorSelectErrors() {
+func (m *Prometheus) IncSelectorSelectErrors() {
 	m.selectorSelectErrorCount.Inc()
 }
 
-func (m Prometheus) IncExecutorExecCalls(id string) {
+func (m *Prometheus) IncExecutorExecCalls(id string) {
 	m.executorExecCount.WithLabelValues(id).Inc()
 }
 
-func (m Prometheus) IncExecutorExecErrors(id string) {
+func (m *Prometheus) IncExecutorExecErrors(id string) {
 	m.executorExecErrorCount.WithLabelValues(id).Inc()
 }
 
-func (m Prometheus) ObserveExecLatency(ctx context.Context, id string, dur time.Duration) {
+func (m *Prometheus) ObserveExecLatency(ctx context.Context, id string, dur time.Duration) {
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		//nolint:forcetypeassert // the underlying implementation implements ExemplarObserver by default
 		m.executorLatency.
 			WithLabelValues(id).(prometheus.ExemplarObserver).
 			ObserveWithExemplar(
@@ -63,11 +67,11 @@ func (m Prometheus) ObserveExecLatency(ctx context.Context, id string, dur time.
 	m.executorLatency.WithLabelValues(id).Observe(dur.Seconds())
 }
 
-func (m Prometheus) IncExecutorNextCalls(id string) {
+func (m *Prometheus) IncExecutorNextCalls(id string) {
 	m.executorNextCount.WithLabelValues(id).Inc()
 }
 
-func (m Prometheus) IsUp(up bool) {
+func (m *Prometheus) IsUp(up bool) {
 	if up {
 		m.cronUp.Set(1.0)
 
@@ -77,7 +81,7 @@ func (m Prometheus) IsUp(up bool) {
 	m.cronUp.Set(0.0)
 }
 
-func (m Prometheus) Registry() (*prometheus.Registry, error) {
+func (m *Prometheus) Registry() (*prometheus.Registry, error) {
 	reg := prometheus.NewRegistry()
 
 	for _, metric := range []prometheus.Collector{
@@ -103,7 +107,7 @@ func (m Prometheus) Registry() (*prometheus.Registry, error) {
 	return reg, nil
 }
 
-func (m Prometheus) Shutdown(ctx context.Context) error {
+func (m *Prometheus) Shutdown(ctx context.Context) error {
 	return m.server.Shutdown(ctx)
 }
 
@@ -112,7 +116,7 @@ func newPrometheus(port int) (Metrics, error) {
 		port = defaultPort
 	}
 
-	prom := Prometheus{
+	prom := &Prometheus{
 		schedulerNextCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "scheduler_next_calls_total",
 			Help: "Count of time-calculations for the following scheduled task",
@@ -163,8 +167,8 @@ func newPrometheus(port int) (Metrics, error) {
 	prom.server = &http.Server{
 		Handler:      mux,
 		Addr:         fmt.Sprintf(":%d", port),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  defaultTimeout,
+		WriteTimeout: defaultTimeout,
 	}
 
 	go func() {
