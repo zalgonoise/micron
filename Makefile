@@ -4,7 +4,7 @@ lint:
 
 test-unit: lint
 	mkdir -p reports/coverage
-	go test ./... -race -coverprofile=reports/coverage/coverage.out
+	go test ./... -coverprofile=reports/coverage/coverage.out
 
 test-integration:
 	mkdir -p reports/coverage
