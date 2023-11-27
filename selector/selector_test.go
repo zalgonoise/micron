@@ -32,109 +32,109 @@ func TestConfig(t *testing.T) {
 
 	for _, testcase := range []struct {
 		name string
-		opts []cfg.Option[Config]
+		opts []cfg.Option[*Config]
 	}{
 		{
 			name: "WithExecutors/NoExecutors",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithExecutors(),
 			},
 		},
 		{
 			name: "WithExecutors/NilExecutor",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithExecutors(nil),
 			},
 		},
 		{
 			name: "WithExecutors/MultipleCalls",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithExecutors(exec),
 				WithExecutors(exec),
 			},
 		},
 		{
 			name: "WithBlock",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithBlock(),
 			},
 		},
 		{
 			name: "WithTimeout/Negative",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTimeout(-3),
 			},
 		},
 		{
 			name: "WithTimeout/Zero",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTimeout(0),
 			},
 		},
 		{
 			name: "WithTimeout/BelowMin",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTimeout(30 * time.Millisecond),
 			},
 		},
 
 		{
 			name: "WithTimeout/OK",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTimeout(100 * time.Millisecond),
 			},
 		},
 		{
 			name: "WithMetrics/NilMetrics",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(nil),
 			},
 		},
 		{
 			name: "WithMetrics/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithMetrics(metrics.NoOp()),
 			},
 		},
 		{
 			name: "WithLogger/NilLogger",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(nil),
 			},
 		},
 		{
 			name: "WithLogger/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogger(slog.New(log.NoOp())),
 			},
 		},
 		{
 			name: "WithLogHandler/NilHandler",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(nil),
 			},
 		},
 		{
 			name: "WithLogHandler/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithLogHandler(log.NoOp()),
 			},
 		},
 		{
 			name: "WithTrace/NilTracer",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(nil),
 			},
 		},
 		{
 			name: "WithTrace/NoOp",
-			opts: []cfg.Option[Config]{
+			opts: []cfg.Option[*Config]{
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
 			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_ = cfg.New(testcase.opts...)
+			_ = cfg.Set(new(Config), testcase.opts...)
 		})
 	}
 }
@@ -205,6 +205,7 @@ func TestSelectorWithLogs(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
+			//nolint:errcheck // unit test with no-ops configured
 			_ = s.Next(ctx)
 
 			switch exec := s.(type) {
@@ -301,6 +302,7 @@ func TestSelectorWithMetrics(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
+			//nolint:errcheck // unit test with no-ops configured
 			_ = s.Next(ctx)
 
 			switch sched := s.(type) {
@@ -314,6 +316,8 @@ func TestSelectorWithMetrics(t *testing.T) {
 			}
 
 			cancel()
+
+			//nolint:errcheck // unit test with no-ops configured
 			_ = s.Next(ctx)
 		})
 	}
@@ -322,6 +326,7 @@ func TestSelectorWithMetrics(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
+		//nolint:errcheck // unit test with expected error
 		_ = AddMetrics(testSelector{}, m).Next(ctx)
 	})
 }
@@ -378,6 +383,7 @@ func TestSelectorWithTrace(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
+			//nolint:errcheck // unit test with no-ops configured
 			_ = s.Next(ctx)
 
 			switch sched := s.(type) {

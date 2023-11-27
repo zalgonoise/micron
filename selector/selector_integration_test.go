@@ -34,6 +34,7 @@ func (r testRunner) Run(context.Context) error {
 	return r.err
 }
 
+//nolint:gocognit // ignore cyclomatic complexity in integration tests, for its extended setup logic
 func TestSelector(t *testing.T) {
 	h := slog.NewJSONHandler(os.Stderr, nil)
 
@@ -109,7 +110,7 @@ func TestSelector(t *testing.T) {
 					n++
 				}
 
-				selectorOpts := []cfg.Option[selector.Config]{
+				selectorOpts := []cfg.Option[*selector.Config]{
 					selector.WithExecutors(execs...),
 					selector.WithLogHandler(h),
 				}

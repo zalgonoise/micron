@@ -49,6 +49,7 @@ func (s blockingSelector) next(ctx context.Context) []executor.Executor {
 		switch {
 		case i == 0:
 			next = t
+
 			exec = append(exec, s.exec[i])
 
 			continue
@@ -59,6 +60,7 @@ func (s blockingSelector) next(ctx context.Context) []executor.Executor {
 		case t < next:
 			next = t
 			exec = make([]executor.Executor, 0, len(s.exec))
+
 			exec = append(exec, s.exec[i])
 
 			continue
