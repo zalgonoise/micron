@@ -326,13 +326,13 @@ func On(values ...int) Scheduler {
 	return stepSchedule{values: values}
 }
 
-func Build(resolvers ...Resolver) (cronlex.Schedule, error) {
-	sched := cronlex.Schedule{}
+func Build(resolvers ...Resolver) (*cronlex.Schedule, error) {
+	sched := &cronlex.Schedule{}
 	cache := map[int]struct{}{}
 
 	for i := range resolvers {
 		if err := validateResolver(resolvers[i]); err != nil {
-			return cronlex.Schedule{}, err
+			return nil, err
 		}
 
 		switch resolvers[i].category {
@@ -357,14 +357,10 @@ func Build(resolvers ...Resolver) (cronlex.Schedule, error) {
 		}
 	}
 
-	var start bool
-	switch {
-	case sched.Sec == nil:
-		sched.Sec = resolve.FixedSchedule{Max: maxSecond, At: minSecond}
-	default:
-		start = true
-	}
+	return populateSchedule(sched), nil
+}
 
+func populateMinutes(start bool, sched *cronlex.Schedule) (bool, *cronlex.Schedule) {
 	switch {
 	case sched.Min == nil && !start:
 		sched.Min = resolve.FixedSchedule{Max: maxMinute, At: minMinute}
@@ -374,6 +370,10 @@ func Build(resolvers ...Resolver) (cronlex.Schedule, error) {
 		start = true
 	}
 
+	return start, sched
+}
+
+func populateHours(start bool, sched *cronlex.Schedule) (bool, *cronlex.Schedule) {
 	switch {
 	case sched.Hour == nil && !start:
 		sched.Hour = resolve.FixedSchedule{Max: maxHour, At: minHour}
@@ -383,30 +383,32 @@ func Build(resolvers ...Resolver) (cronlex.Schedule, error) {
 		start = true
 	}
 
-	if sched.DayWeek == nil {
-		switch {
-		case sched.DayMonth == nil && !start:
-			sched.DayMonth = resolve.FixedSchedule{Max: maxDay, At: minDay}
-		case sched.DayMonth == nil:
-			sched.DayMonth = resolve.Everytime{}
-		default:
-			start = true
-		}
+	return start, sched
+}
 
-		switch {
-		case sched.Month == nil && !start:
-			sched.Month = resolve.FixedSchedule{Max: maxMonth, At: minMonth}
-		case sched.Month == nil:
-			sched.Month = resolve.Everytime{}
-		default:
-			start = true
-		}
-
-		sched.DayWeek = resolve.Everytime{}
-
-		return sched, nil
+func populateDays(start bool, sched *cronlex.Schedule) *cronlex.Schedule {
+	switch {
+	case sched.DayMonth == nil && !start:
+		sched.DayMonth = resolve.FixedSchedule{Max: maxDay, At: minDay}
+	case sched.DayMonth == nil:
+		sched.DayMonth = resolve.Everytime{}
+	default:
+		start = true
 	}
 
+	switch {
+	case sched.Month == nil && !start:
+		sched.Month = resolve.FixedSchedule{Max: maxMonth, At: minMonth}
+	case sched.Month == nil:
+		sched.Month = resolve.Everytime{}
+	}
+
+	sched.DayWeek = resolve.Everytime{}
+
+	return sched
+}
+
+func populateWeekdays(start bool, sched *cronlex.Schedule) *cronlex.Schedule {
 	sched.DayMonth = resolve.Everytime{}
 	sched.Month = resolve.Everytime{}
 
@@ -415,11 +417,29 @@ func Build(resolvers ...Resolver) (cronlex.Schedule, error) {
 		sched.DayWeek = resolve.FixedSchedule{Max: maxWeekday, At: minWeekday}
 	case sched.DayWeek == nil:
 		sched.DayWeek = resolve.Everytime{}
+	}
+
+	return sched
+}
+
+func populateSchedule(sched *cronlex.Schedule) *cronlex.Schedule {
+	var start bool
+
+	switch {
+	case sched.Sec == nil:
+		sched.Sec = resolve.FixedSchedule{Max: maxSecond, At: minSecond}
 	default:
 		start = true
 	}
 
-	return sched, nil
+	start, sched = populateMinutes(start, sched)
+	start, sched = populateHours(start, sched)
+
+	if sched.DayWeek == nil {
+		return populateDays(start, sched)
+	}
+
+	return populateWeekdays(start, sched)
 }
 
 func validateResolver(r Resolver) error {
@@ -445,7 +465,6 @@ func validate(r Resolver, minimum int) error {
 	switch v := r.resolver.(type) {
 	case resolve.Everytime:
 		// valid
-
 		return nil
 	case resolve.FixedSchedule:
 		if v.At < minimum || v.At > v.Max {
