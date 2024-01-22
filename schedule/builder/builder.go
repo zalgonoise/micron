@@ -328,8 +328,6 @@ func On(values ...int) Scheduler {
 
 func Build(resolvers ...Resolver) (*cronlex.Schedule, error) {
 	sched := &cronlex.Schedule{}
-	cache := map[int]struct{}{}
-
 	for i := range resolvers {
 		if err := validateResolver(resolvers[i]); err != nil {
 			return nil, err
@@ -338,22 +336,16 @@ func Build(resolvers ...Resolver) (*cronlex.Schedule, error) {
 		switch resolvers[i].category {
 		case seconds:
 			sched.Sec = resolvers[i].resolver
-			cache[0] = struct{}{}
 		case minutes:
 			sched.Min = resolvers[i].resolver
-			cache[1] = struct{}{}
 		case hours:
 			sched.Hour = resolvers[i].resolver
-			cache[2] = struct{}{}
 		case monthDays:
 			sched.DayMonth = resolvers[i].resolver
-			cache[3] = struct{}{}
 		case months:
 			sched.Month = resolvers[i].resolver
-			cache[4] = struct{}{}
 		case weekdays:
 			sched.DayWeek = resolvers[i].resolver
-			cache[5] = struct{}{}
 		}
 	}
 
