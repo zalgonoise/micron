@@ -119,85 +119,31 @@ func TestBuild(t *testing.T) {
 			sched, err := Build(testcase.resolvers...)
 
 			isEqual(t, true, errors.Is(err, testcase.err))
-			if steps, ok := testcase.wants.Sec.(resolve.StepSchedule); ok {
-				got, ok := sched.Sec.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.Sec, sched.Sec)
-			}
-
-			if steps, ok := testcase.wants.Min.(resolve.StepSchedule); ok {
-				got, ok := sched.Min.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.Min, sched.Min)
-			}
-
-			if steps, ok := testcase.wants.Hour.(resolve.StepSchedule); ok {
-				got, ok := sched.Hour.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.Hour, sched.Hour)
-			}
-
-			if steps, ok := testcase.wants.DayMonth.(resolve.StepSchedule); ok {
-				got, ok := sched.DayMonth.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.DayMonth, sched.DayMonth)
-			}
-
-			if steps, ok := testcase.wants.Month.(resolve.StepSchedule); ok {
-				got, ok := sched.Month.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.Month, sched.Month)
-			}
-
-			if steps, ok := testcase.wants.DayWeek.(resolve.StepSchedule); ok {
-				got, ok := sched.DayWeek.(resolve.StepSchedule)
-
-				isEqual(t, true, ok)
-
-				isEqual(t, steps.Max, got.Max)
-				for i := range steps.Steps {
-					isEqual(t, steps.Steps[i], got.Steps[i])
-				}
-			} else {
-				isEqual(t, testcase.wants.DayWeek, sched.DayWeek)
-			}
+			isEqualResolver(t, testcase.wants.Sec, sched.Sec)
+			isEqualResolver(t, testcase.wants.Min, sched.Min)
+			isEqualResolver(t, testcase.wants.Hour, sched.Hour)
+			isEqualResolver(t, testcase.wants.DayMonth, sched.DayMonth)
+			isEqualResolver(t, testcase.wants.Month, sched.Month)
+			isEqualResolver(t, testcase.wants.DayWeek, sched.DayWeek)
 		})
 	}
+}
+
+func isEqualResolver(t *testing.T, wants, got cronlex.Resolver) {
+	if steps, ok := wants.(resolve.StepSchedule); ok {
+		got, ok := got.(resolve.StepSchedule)
+
+		isEqual(t, true, ok)
+		isEqual(t, steps.Max, got.Max)
+
+		for i := range steps.Steps {
+			isEqual(t, steps.Steps[i], got.Steps[i])
+		}
+
+		return
+	}
+
+	isEqual(t, wants, got)
 }
 
 func isEqual[T comparable](t *testing.T, wants, got T) {
