@@ -9,8 +9,7 @@ import (
 //
 // If the input tracer is nil, the Runtime's tracer will be set to be a no-op.
 //
-// If the input Runtime is nil or a no-op Runtime, a no-op Runtime is returned. If the input trace.Tracer is nil, then
-// the input Runtime is returned as-is.
+// If the input Runtime is nil or a no-op Runtime, a no-op Runtime is returned.
 //
 // If the input Runtime is a valid Runtime, then its tracer is replaced with the input one.
 //

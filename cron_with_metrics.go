@@ -2,17 +2,15 @@ package micron
 
 import "github.com/zalgonoise/micron/metrics"
 
-// AddMetrics decorates the input Runtime with metrics, using the input Metrics interface.
+// AddMetrics replaces the input Runtime's metrics, using the input Metrics interface.
 //
 // If the input metrics is nil, the Runtime's metrics will be set to be a no-op.
 //
-// If the input Runtime is nil or a no-op Runtime, a no-op Runtime is returned. If the input Metrics is nil or if it is
-// a no-op Metrics interface, then the input Runtime is returned as-is.
+// If the input Runtime is nil or a no-op Runtime, a no-op Runtime is returned.
 //
-// If the input Runtime is already a Runtime with metrics, then this Runtime with metrics is returned with the new
-// Metrics interface configured in place of the former.
+// If the input Runtime is a valid Runtime, then its metrics collector is replaced with the input one.
 //
-// Otherwise, the Runtime is decorated with metrics within a custom type that implements Runtime.
+// Otherwise, the Runtime is returned as-is.
 func AddMetrics(r Runtime, m Metrics) Runtime {
 	if m == nil || m == metrics.NoOp() {
 		m = metrics.NoOp()
