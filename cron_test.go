@@ -114,86 +114,75 @@ func TestRuntimeWithLogs(t *testing.T) {
 	r := runtime{
 		sel: selector.NoOp(),
 		err: make(chan error),
+
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name           string
-		r              Runtime
-		handler        slog.Handler
-		wants          Runtime
-		defaultHandler bool
+		name       string
+		r          Runtime
+		handler    slog.Handler
+		nilHandler bool
+		nilRuntime bool
+		noOpCron   bool
 	}{
 		{
-			name:  "NilRuntime",
-			wants: noOpRuntime{},
+			name:       "NilRuntime",
+			nilRuntime: true,
 		},
 		{
-			name:  "NoOpRuntime",
-			r:     noOpRuntime{},
-			wants: noOpRuntime{},
+			name:     "NoOpRuntime",
+			r:        noOpRuntime{},
+			noOpCron: true,
 		},
 		{
-			name: "NilHandler",
-			r:    r,
-			wants: withLogs{
-				r: r,
-			},
-			defaultHandler: true,
+			name:       "NilHandler",
+			r:          r,
+			nilHandler: true,
 		},
 		{
 			name:    "WithHandler",
 			r:       r,
 			handler: h,
-			wants: withLogs{
-				r:      r,
-				logger: slog.New(h),
-			},
 		},
 		{
 			name:    "WithNoOpHandler",
 			r:       r,
 			handler: log.NoOp(),
-			wants: withLogs{
-				r: r,
-			},
-			defaultHandler: true,
 		},
 		{
 			name: "ReplaceHandler",
-			r: withLogs{
-				r: r,
+			r: runtime{
+				sel:     r.sel,
+				err:     r.err,
+				logger:  log.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
 			handler: h,
-			wants: withLogs{
-				r:      r,
-				logger: slog.New(h),
-			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			r := AddLogs(testcase.r, testcase.handler)
+			cronRuntime := AddLogs(testcase.r, testcase.handler)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			r.Run(ctx)
-			_ = r.Err()
+			cronRuntime.Run(ctx)
+			_ = cronRuntime.Err()
 
-			switch exec := r.(type) {
+			switch c := cronRuntime.(type) {
 			case noOpRuntime:
-				is.Equal(t, testcase.wants, r)
-			case withLogs:
-				wants, ok := testcase.wants.(withLogs)
-				is.True(t, ok)
-
-				is.Equal(t, wants.r, exec.r)
-				if testcase.defaultHandler {
-					is.True(t, exec.logger.Handler() != nil)
-
-					return
+				is.True(t, testcase.nilRuntime || testcase.noOpCron)
+			case runtime:
+				switch {
+				case testcase.handler == nil:
+					is.True(t, testcase.nilHandler)
+				default:
+					is.Equal(t, testcase.handler, c.logger.Handler())
 				}
-
-				is.Equal(t, wants.logger.Handler(), exec.logger.Handler())
 			}
 		})
 	}
@@ -208,141 +197,151 @@ func TestRuntimeWithMetrics(t *testing.T) {
 	r := runtime{
 		sel: selector.NoOp(),
 		err: make(chan error),
+
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name  string
-		r     Runtime
-		m     Metrics
-		wants Runtime
+		name       string
+		r          Runtime
+		m          Metrics
+		nilMetrics bool
+		nilRuntime bool
+		noOpCron   bool
 	}{
 		{
-			name:  "NilRuntime",
-			wants: noOpRuntime{},
+			name:       "NilRuntime",
+			nilRuntime: true,
 		},
 		{
-			name:  "NoOpRuntime",
-			r:     noOpRuntime{},
-			wants: noOpRuntime{},
+			name:     "NoOpRuntime",
+			r:        noOpRuntime{},
+			noOpCron: true,
 		},
 		{
-			name:  "NilMetrics",
-			r:     r,
-			wants: r,
+			name:       "NilMetrics",
+			r:          r,
+			nilMetrics: true,
 		},
 		{
-			name:  "NoOpMetrics",
-			r:     r,
-			m:     metrics.NoOp(),
-			wants: r,
+			name: "NoOpMetrics",
+			r:    r,
+			m:    metrics.NoOp(),
 		},
 		{
 			name: "WithMetrics",
 			r:    r,
 			m:    m,
-			wants: withMetrics{
-				r: r,
-				m: m,
-			},
 		},
 		{
 			name: "ReplaceMetrics",
-			r: withMetrics{
-				r: r,
+			r: runtime{
+				sel: selector.NoOp(),
+				err: make(chan error),
+
+				logger:  slog.New(log.NoOp()),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
 			m: m,
-			wants: withMetrics{
-				r: r,
-				m: m,
-			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			r := AddMetrics(testcase.r, testcase.m)
+			cronRuntime := AddMetrics(testcase.r, testcase.m)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			r.Run(ctx)
-			_ = r.Err()
+			cronRuntime.Run(ctx)
+			_ = cronRuntime.Err()
 
-			switch sched := r.(type) {
+			switch c := cronRuntime.(type) {
 			case noOpRuntime:
-				is.Equal(t, testcase.wants, r)
-			case withMetrics:
-				wants, ok := testcase.wants.(withMetrics)
-				is.True(t, ok)
-				is.Equal(t, wants.r, sched.r)
-				is.Equal(t, wants.m, sched.m)
+				is.True(t, testcase.nilRuntime || testcase.noOpCron)
+			case runtime:
+				switch {
+				case testcase.m == nil:
+					is.True(t, testcase.nilMetrics)
+				default:
+					is.Equal(t, testcase.m, c.metrics)
+				}
 			}
 		})
 	}
 }
 
 func TestRuntimeWithTrace(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("configured test")
 	r := runtime{
 		sel: selector.NoOp(),
 		err: make(chan error),
+
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name   string
-		r      Runtime
-		tracer trace.Tracer
-		wants  Runtime
+		name       string
+		r          Runtime
+		tracer     trace.Tracer
+		nilTracer  bool
+		nilRuntime bool
+		noOpCron   bool
 	}{
 		{
-			name:  "NilRuntime",
-			wants: noOpRuntime{},
+			name:       "NilRuntime",
+			nilRuntime: true,
 		},
 		{
-			name:  "NoOpRuntime",
-			r:     noOpRuntime{},
-			wants: noOpRuntime{},
+			name:     "NoOpRuntime",
+			r:        noOpRuntime{},
+			noOpCron: true,
 		},
 		{
-			name:  "NilTracer",
-			r:     r,
-			wants: r,
+			name:      "NilTracer",
+			r:         r,
+			nilTracer: true,
 		},
 		{
 			name:   "WithTracer",
 			r:      r,
-			tracer: noop.NewTracerProvider().Tracer("test"),
-			wants: withTrace{
-				r:      r,
-				tracer: noop.NewTracerProvider().Tracer("test"),
-			},
+			tracer: tracer,
 		},
 		{
 			name: "ReplaceTracer",
-			r: withTrace{
-				r: r,
+			r: runtime{
+				sel: selector.NoOp(),
+				err: make(chan error),
+
+				logger:  slog.New(log.NoOp()),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
-			tracer: noop.NewTracerProvider().Tracer("test"),
-			wants: withTrace{
-				r:      r,
-				tracer: noop.NewTracerProvider().Tracer("test"),
-			},
+			tracer: tracer,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			r := AddTraces(testcase.r, testcase.tracer)
+			cronRuntime := AddTraces(testcase.r, testcase.tracer)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			r.Run(ctx)
-			_ = r.Err()
+			cronRuntime.Run(ctx)
+			_ = cronRuntime.Err()
 
-			switch sched := r.(type) {
+			switch c := cronRuntime.(type) {
 			case noOpRuntime:
-				is.Equal(t, testcase.wants, r)
-			case withTrace:
-				wants, ok := testcase.wants.(withTrace)
-				is.True(t, ok)
-				is.Equal(t, wants.r, sched.r)
-				is.Equal(t, wants.tracer, sched.tracer)
+				is.True(t, testcase.nilRuntime || testcase.noOpCron)
+			case runtime:
+				switch {
+				case testcase.tracer == nil:
+					is.True(t, testcase.nilTracer)
+				default:
+					is.Equal(t, testcase.tracer, c.tracer)
+				}
 			}
 		})
 	}
