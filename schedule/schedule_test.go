@@ -253,6 +253,7 @@ func TestSchedulerWithLogs(t *testing.T) {
 				is.True(t, ok)
 
 				is.Equal(t, wants.s, sched.s)
+
 				if testcase.defaultHandler {
 					is.True(t, sched.logger.Handler() != nil)
 
