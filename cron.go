@@ -2,9 +2,11 @@ package micron
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zalgonoise/micron/selector"
 )
@@ -46,10 +48,20 @@ type Runtime interface {
 	Err() <-chan error
 }
 
+// Metrics describes the actions that register Runtime-related metrics.
+type Metrics interface {
+	// IsUp signals whether the Runtime is running or not.
+	IsUp(bool)
+}
+
 type runtime struct {
 	sel selector.Selector
 
 	err chan error
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
 }
 
 // Run kicks-off the cron module using the input context.Context.
@@ -59,6 +71,18 @@ type runtime struct {
 //
 // Any error raised within a Run cycle is channeled to the Runtime errors channel, accessible with the Err method.
 func (r runtime) Run(ctx context.Context) {
+	ctx, span := r.tracer.Start(ctx, "Runtime.Run")
+	defer span.End()
+
+	r.logger.InfoContext(ctx, "starting cron")
+	r.metrics.IsUp(true)
+
+	defer func() {
+		r.logger.InfoContext(ctx, "closing cron")
+		r.metrics.IsUp(false)
+		span.AddEvent("closing runtime")
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -85,31 +109,18 @@ func (r runtime) Err() <-chan error {
 // or a (set of) executor.Executor(s) through the WithJob option. The caller is free to select any they desire,
 // and as such both means of creating this requirement are served as cfg.Option.
 func New(options ...cfg.Option[*Config]) (Runtime, error) {
-	config := cfg.Set(new(Config), options...)
+	config := cfg.Set(defaultConfig(), options...)
 
-	cron, err := newRuntime(config)
-	if err != nil {
-		return noOpRuntime{}, errs.Join(ErrEmptySelector, err)
-	}
-
-	if config.metrics != nil {
-		cron = AddMetrics(cron, config.metrics)
-	}
-
-	if config.handler != nil {
-		cron = AddLogs(cron, config.handler)
-	}
-
-	if config.tracer != nil {
-		cron = AddTraces(cron, config.tracer)
-	}
-
-	return cron, nil
+	return newRuntime(config)
 }
 
 func newRuntime(config *Config) (Runtime, error) {
 	// validate input
 	if config.sel == nil {
+		if len(config.execs) == 0 {
+			return NoOp(), errs.Join(ErrEmptySelector, selector.ErrEmptyExecutorsList)
+		}
+
 		sel, err := selector.New(selector.WithExecutors(config.execs...))
 		if err != nil {
 			return NoOp(), err
@@ -126,6 +137,10 @@ func newRuntime(config *Config) (Runtime, error) {
 	return runtime{
 		sel: config.sel,
 		err: make(chan error, size),
+
+		logger:  slog.New(config.handler),
+		metrics: config.metrics,
+		tracer:  config.tracer,
 	}, nil
 }
 
