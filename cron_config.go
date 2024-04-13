@@ -5,8 +5,11 @@ import (
 
 	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/zalgonoise/micron/executor"
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/selector"
 )
 
@@ -19,11 +22,21 @@ const (
 type Config struct {
 	errBufferSize int
 
+	sel   selector.Selector
+	execs []executor.Executor
+
 	handler slog.Handler
 	metrics Metrics
 	tracer  trace.Tracer
-	sel     selector.Selector
-	execs   []executor.Executor
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		errBufferSize: minBufferSize,
+		handler:       log.NoOp(),
+		metrics:       metrics.NoOp(),
+		tracer:        noop.NewTracerProvider().Tracer("no-op runtime"),
+	}
 }
 
 // WithSelector configures the Runtime with the input selector.Selector.
