@@ -328,6 +328,7 @@ func On(values ...int) Scheduler {
 
 func Build(resolvers ...Resolver) (*cronlex.Schedule, error) {
 	sched := &cronlex.Schedule{}
+
 	for i := range resolvers {
 		if err := validateResolver(resolvers[i]); err != nil {
 			return nil, err
