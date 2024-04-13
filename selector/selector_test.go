@@ -216,6 +216,7 @@ func TestSelectorWithLogs(t *testing.T) {
 				is.True(t, ok)
 
 				is.Equal(t, wants.s, exec.s)
+
 				if testcase.defaultHandler {
 					is.True(t, exec.logger.Handler() != nil)
 
