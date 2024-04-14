@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/zalgonoise/cfg"
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/zalgonoise/micron/executor"
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 )
 
 type Config struct {
