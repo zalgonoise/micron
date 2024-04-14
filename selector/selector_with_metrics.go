@@ -23,11 +23,11 @@ func AddMetrics(s Selector, m Metrics) Selector {
 	}
 
 	switch sel := s.(type) {
-	case selector:
+	case *selector:
 		sel.metrics = m
 
 		return sel
-	case blockingSelector:
+	case *blockingSelector:
 		sel.metrics = m
 
 		return sel

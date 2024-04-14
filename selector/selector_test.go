@@ -207,14 +207,14 @@ func TestSelectorWithLogs(t *testing.T) {
 				is.True(t, testcase.nilSelector || testcase.noOpSel)
 
 				return
-			case selector:
+			case *selector:
 				switch {
 				case testcase.handler == nil:
 					is.True(t, testcase.nilHandler)
 				default:
 					is.Equal(t, testcase.handler, sel.logger.Handler())
 				}
-			case blockingSelector:
+			case *blockingSelector:
 				switch {
 				case testcase.handler == nil:
 					is.True(t, testcase.nilHandler)
@@ -301,14 +301,14 @@ func TestSelectorWithMetrics(t *testing.T) {
 				is.True(t, testcase.nilSelector || testcase.noOpSel)
 
 				return
-			case selector:
+			case *selector:
 				switch {
 				case testcase.m == nil:
 					is.True(t, testcase.nilMetrics)
 				default:
 					is.Equal(t, testcase.m, sel.metrics)
 				}
-			case blockingSelector:
+			case *blockingSelector:
 				switch {
 				case testcase.m == nil:
 					is.True(t, testcase.nilMetrics)
@@ -394,14 +394,14 @@ func TestSelectorWithTrace(t *testing.T) {
 				is.True(t, testcase.nilSelector || testcase.noOpSel)
 
 				return
-			case selector:
+			case *selector:
 				switch {
 				case testcase.tracer == nil:
 					is.True(t, testcase.nilTracer)
 				default:
 					is.Equal(t, testcase.tracer, sel.tracer)
 				}
-			case blockingSelector:
+			case *blockingSelector:
 				switch {
 				case testcase.tracer == nil:
 					is.True(t, testcase.nilTracer)
@@ -475,21 +475,21 @@ func TestZeroExecutors(t *testing.T) {
 	t.Run("WithBlock/FromRawSelector", func(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
-			blockingSelector{
+			(&blockingSelector{
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),
-			}.Next(context.Background()),
+			}).Next(context.Background()),
 		))
 	})
 	t.Run("NonBlocking/FromRawSelector", func(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
-			selector{
+			(&selector{
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),
-			}.Next(context.Background()),
+			}).Next(context.Background()),
 		))
 	})
 

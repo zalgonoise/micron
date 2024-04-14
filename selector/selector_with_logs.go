@@ -25,11 +25,11 @@ func AddLogs(s Selector, handler slog.Handler) Selector {
 	}
 
 	switch sel := s.(type) {
-	case selector:
+	case *selector:
 		sel.logger = slog.New(handler)
 
 		return sel
-	case blockingSelector:
+	case *blockingSelector:
 		sel.logger = slog.New(handler)
 
 		return sel
