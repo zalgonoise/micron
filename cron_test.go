@@ -188,12 +188,8 @@ func TestRuntimeWithLogs(t *testing.T) {
 	}
 }
 
-type testMetrics struct{}
-
-func (testMetrics) IsUp(bool) {}
-
 func TestRuntimeWithMetrics(t *testing.T) {
-	m := testMetrics{}
+	m := metrics.NoOp()
 	r := runtime{
 		sel: selector.NoOp(),
 		err: make(chan error),
