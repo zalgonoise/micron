@@ -3,10 +3,14 @@ package executor
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zalgonoise/micron/schedule"
 )
@@ -95,17 +99,50 @@ type Executor interface {
 	ID() string
 }
 
+// Metrics describes the actions that register Executor-related metrics.
+type Metrics interface {
+	// IncExecutorExecCalls increases the count of Exec calls, by the Executor.
+	IncExecutorExecCalls(id string)
+	// IncExecutorExecErrors increases the count of Exec call errors, by the Executor.
+	IncExecutorExecErrors(id string)
+	// ObserveExecLatency registers the duration of an Exec call, by the Executor.
+	ObserveExecLatency(ctx context.Context, id string, dur time.Duration)
+	// IncExecutorNextCalls increases the count of Next calls, by the Executor.
+	IncExecutorNextCalls(id string)
+}
+
 // Executable is an implementation of the Executor interface. It uses a schedule.Scheduler to mark the next job's
 // execution time, and supports multiple Runner.
 type Executable struct {
 	id      string
 	cron    schedule.Scheduler
 	runners []Runner
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
 }
 
 // Next calls the Executor's underlying schedule.Scheduler Next method.
-func (e Executable) Next(ctx context.Context) time.Time {
-	return e.cron.Next(ctx, time.Now())
+func (e *Executable) Next(ctx context.Context) time.Time {
+	ctx, span := e.tracer.Start(ctx, "Executor.Next")
+	defer span.End()
+
+	e.metrics.IncExecutorNextCalls(e.id)
+
+	next := e.cron.Next(ctx, time.Now())
+
+	e.logger.InfoContext(ctx, "next job",
+		slog.String("id", e.id),
+		slog.Time("at", next),
+	)
+
+	span.SetAttributes(
+		attribute.String("id", e.id),
+		attribute.String("at", next.Format(time.RFC3339)),
+	)
+
+	return next
 }
 
 // Exec runs the task when on its scheduled time.
@@ -113,20 +150,42 @@ func (e Executable) Next(ctx context.Context) time.Time {
 // For this, Exec leverages the Executor's underlying schedule.Scheduler to retrieve the job's next execution time,
 // waits for it, and calls Runner.Run on each configured Runner. All raised errors are joined and returned at the end
 // of this call.
-func (e Executable) Exec(ctx context.Context) error {
+func (e *Executable) Exec(ctx context.Context) error {
+	ctx, span := e.tracer.Start(ctx, "Executor.Exec")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("id", e.id))
+	e.metrics.IncExecutorExecCalls(e.id)
+	e.logger.InfoContext(ctx, "executing task", slog.String("id", e.id))
+
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	now := time.Now()
-	next := e.cron.Next(execCtx, now)
-	timer := time.NewTimer(next.Sub(now))
+	start := time.Now()
+
+	defer func() {
+		e.metrics.ObserveExecLatency(ctx, e.id, time.Since(start))
+	}()
+
+	next := e.cron.Next(execCtx, start)
+	timer := time.NewTimer(next.Sub(start))
 
 	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err := ctx.Err()
+
+			e.metrics.IncExecutorExecErrors(e.id)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			e.logger.WarnContext(ctx, "task cancelled",
+				slog.String("id", e.id),
+				slog.String("error", err.Error()),
+			)
+
+			return err
 
 		case <-timer.C:
 			// avoid executing before it's time, as it may trigger repeated runs
@@ -142,13 +201,28 @@ func (e Executable) Exec(ctx context.Context) error {
 				}
 			}
 
-			return errors.Join(runnerErrs...)
+			if len(runnerErrs) > 0 {
+				err := errors.Join(runnerErrs...)
+
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				e.metrics.IncExecutorExecErrors(e.id)
+				e.logger.ErrorContext(ctx, "task execution error(s)",
+					slog.String("id", e.id),
+					slog.Int("num_errors", len(runnerErrs)),
+					slog.String("errors", err.Error()),
+				)
+
+				return err
+			}
+
+			return nil
 		}
 	}
 }
 
 // ID returns this Executor's ID.
-func (e Executable) ID() string {
+func (e *Executable) ID() string {
 	return e.id
 }
 
@@ -160,26 +234,9 @@ func (e Executable) ID() string {
 //
 // If an ID is not supplied, then the default ID of `micron.executor` is set.
 func New(id string, options ...cfg.Option[*Config]) (Executor, error) {
-	config := cfg.Set(new(Config), options...)
+	config := cfg.Set(defaultConfig(), options...)
 
-	exec, err := newExecutable(id, config)
-	if err != nil {
-		return noOpExecutor{}, err
-	}
-
-	if config.metrics != nil {
-		exec = AddMetrics(exec, config.metrics)
-	}
-
-	if config.handler != nil {
-		exec = AddLogs(exec, config.handler)
-	}
-
-	if config.tracer != nil {
-		exec = AddTraces(exec, config.tracer)
-	}
-
-	return exec, nil
+	return newExecutable(id, config)
 }
 
 func newExecutable(id string, config *Config) (Executor, error) {
@@ -223,10 +280,14 @@ func newExecutable(id string, config *Config) (Executor, error) {
 	}
 
 	// return the object with the provided runners
-	return Executable{
+	return &Executable{
 		id:      id,
 		cron:    sched,
 		runners: config.runners,
+
+		logger:  slog.New(config.handler),
+		metrics: config.metrics,
+		tracer:  config.tracer,
 	}, nil
 }
 
