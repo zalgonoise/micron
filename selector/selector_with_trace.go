@@ -24,11 +24,11 @@ func AddTraces(s Selector, tracer trace.Tracer) Selector {
 	}
 
 	switch sel := s.(type) {
-	case selector:
+	case *selector:
 		sel.tracer = tracer
 
 		return sel
-	case blockingSelector:
+	case *blockingSelector:
 		sel.tracer = tracer
 
 		return sel

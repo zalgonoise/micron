@@ -78,7 +78,7 @@ type selector struct {
 // execution times. If that is the case, the executor is launched in an executor.Multi call.
 //
 // The error returned from a Next call is the error raised by the executor.Executor's Exec call.
-func (s selector) Next(ctx context.Context) error {
+func (s *selector) Next(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "Selector.Select")
 	defer span.End()
 
@@ -152,7 +152,7 @@ func (s selector) Next(ctx context.Context) error {
 	}
 }
 
-func (s selector) next(ctx context.Context) []executor.Executor {
+func (s *selector) next(ctx context.Context) []executor.Executor {
 	var (
 		next time.Duration
 		exec = make([]executor.Executor, 0, len(s.exec))
@@ -206,7 +206,7 @@ func newSelector(config *Config) (Selector, error) {
 	}
 
 	if config.block {
-		return blockingSelector{
+		return &blockingSelector{
 			exec:    config.exec,
 			logger:  slog.New(config.handler),
 			metrics: config.metrics,
@@ -218,7 +218,7 @@ func newSelector(config *Config) (Selector, error) {
 		config.timeout = defaultTimeout
 	}
 
-	return selector{
+	return &selector{
 		timeout: config.timeout,
 		exec:    config.exec,
 		logger:  slog.New(config.handler),
