@@ -6,7 +6,10 @@ import (
 
 	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule"
 )
 
@@ -20,6 +23,14 @@ type Config struct {
 	handler slog.Handler
 	metrics Metrics
 	tracer  trace.Tracer
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		handler: log.NoOp(),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("executor's no-op tracer"),
+	}
 }
 
 // WithRunners configures the Executor with the input Runner(s).
