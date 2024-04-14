@@ -2,10 +2,13 @@ package selector
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zalgonoise/micron/executor"
 )
@@ -48,9 +51,21 @@ type Selector interface {
 	Next(ctx context.Context) error
 }
 
+// Metrics describes the actions that register Selector-related metrics.
+type Metrics interface {
+	// IncSelectorSelectCalls increases the count of Select calls, by the Selector.
+	IncSelectorSelectCalls()
+	// IncSelectorSelectErrors increases the count of Select call errors, by the Selector.
+	IncSelectorSelectErrors()
+}
+
 type selector struct {
 	timeout time.Duration
 	exec    []executor.Executor
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
 }
 
 // Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
@@ -64,12 +79,29 @@ type selector struct {
 //
 // The error returned from a Next call is the error raised by the executor.Executor's Exec call.
 func (s selector) Next(ctx context.Context) error {
-	// minStepDuration ensures that each execution is locked to the seconds mark and
-	// a runner is not executed more than once per trigger.
-	defer time.Sleep(minStepDuration)
+	ctx, span := s.tracer.Start(ctx, "Selector.Select")
+	defer span.End()
+
+	s.metrics.IncSelectorSelectCalls()
+	s.logger.InfoContext(ctx, "selecting the next task")
+
+	defer func() {
+		// minStepDuration ensures that each execution is locked to the seconds mark and
+		// a runner is not executed more than once per trigger.
+		time.Sleep(minStepDuration)
+	}()
 
 	if len(s.exec) == 0 {
-		return ErrEmptyExecutorsList
+		err := ErrEmptyExecutorsList
+
+		s.metrics.IncSelectorSelectCalls()
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		s.logger.ErrorContext(ctx, "no tasks configured for execution",
+			slog.String("error", err.Error()),
+		)
+
+		return err
 	}
 
 	localCtx, cancel := context.WithTimeout(ctx, s.timeout)
@@ -90,6 +122,8 @@ func (s selector) Next(ctx context.Context) error {
 		select {
 		case <-localCtx.Done():
 			close(errCh)
+
+			return
 		default:
 			errCh <- err
 		}
@@ -98,7 +132,22 @@ func (s selector) Next(ctx context.Context) error {
 	select {
 	case <-localCtx.Done():
 		return nil
-	case err := <-errCh:
+	case err, ok := <-errCh:
+		if !ok {
+			return nil
+		}
+
+		if err == nil {
+			return nil
+		}
+
+		s.metrics.IncSelectorSelectCalls()
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		s.logger.ErrorContext(ctx, "failed to select and execute the next task",
+			slog.String("error", err.Error()),
+		)
+
 		return err
 	}
 }
@@ -141,23 +190,11 @@ func (s selector) next(ctx context.Context) []executor.Executor {
 // Creating a Selector requires at least one executor.Executor, which can be added through the WithExecutors option. To
 // allow this configuration to be variadic as well, it is served as a cfg.Option.
 func New(options ...cfg.Option[*Config]) (Selector, error) {
-	config := cfg.Set(new(Config), options...)
+	config := cfg.Set(defaultConfig(), options...)
 
 	sel, err := newSelector(config)
 	if err != nil {
 		return noOpSelector{}, err
-	}
-
-	if config.metrics != nil {
-		sel = AddMetrics(sel, config.metrics)
-	}
-
-	if config.handler != nil {
-		sel = AddLogs(sel, config.handler)
-	}
-
-	if config.tracer != nil {
-		sel = AddTraces(sel, config.tracer)
 	}
 
 	return sel, nil
@@ -170,7 +207,10 @@ func newSelector(config *Config) (Selector, error) {
 
 	if config.block {
 		return blockingSelector{
-			exec: config.exec,
+			exec:    config.exec,
+			logger:  slog.New(config.handler),
+			metrics: config.metrics,
+			tracer:  config.tracer,
 		}, nil
 	}
 
@@ -181,6 +221,9 @@ func newSelector(config *Config) (Selector, error) {
 	return selector{
 		timeout: config.timeout,
 		exec:    config.exec,
+		logger:  slog.New(config.handler),
+		metrics: config.metrics,
+		tracer:  config.tracer,
 	}, nil
 }
 
