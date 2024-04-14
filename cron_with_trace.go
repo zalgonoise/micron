@@ -16,7 +16,7 @@ import (
 // Otherwise, the Runtime is returned as-is.
 func AddTraces(r Runtime, tracer trace.Tracer) Runtime {
 	if tracer == nil {
-		tracer = noop.NewTracerProvider().Tracer("no-op cron runtime")
+		tracer = noop.NewTracerProvider().Tracer("runtime's no-op tracer")
 	}
 
 	if r == nil || r == NoOp() {

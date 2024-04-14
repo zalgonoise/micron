@@ -35,7 +35,7 @@ func defaultConfig() *Config {
 		errBufferSize: minBufferSize,
 		handler:       log.NoOp(),
 		metrics:       metrics.NoOp(),
-		tracer:        noop.NewTracerProvider().Tracer("no-op runtime"),
+		tracer:        noop.NewTracerProvider().Tracer("runtime's no-op tracer"),
 	}
 }
 
