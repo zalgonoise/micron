@@ -5,9 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/zalgonoise/micron/executor"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/zalgonoise/micron/executor"
 )
 
 type blockingSelector struct {
@@ -35,11 +36,9 @@ func (s *blockingSelector) Next(ctx context.Context) error {
 	s.metrics.IncSelectorSelectCalls()
 	s.logger.InfoContext(ctx, "selecting the next task")
 
-	defer func() {
-		// minStepDuration ensures that each execution is locked to the seconds mark and
-		// a runner is not executed more than once per trigger.
-		time.Sleep(minStepDuration)
-	}()
+	// minStepDuration ensures that each execution is locked to the seconds mark and
+	// a runner is not executed more than once per trigger.
+	defer time.Sleep(minStepDuration)
 
 	var err error
 

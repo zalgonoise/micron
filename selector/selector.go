@@ -85,11 +85,9 @@ func (s *selector) Next(ctx context.Context) error {
 	s.metrics.IncSelectorSelectCalls()
 	s.logger.InfoContext(ctx, "selecting the next task")
 
-	defer func() {
-		// minStepDuration ensures that each execution is locked to the seconds mark and
-		// a runner is not executed more than once per trigger.
-		time.Sleep(minStepDuration)
-	}()
+	// minStepDuration ensures that each execution is locked to the seconds mark and
+	// a runner is not executed more than once per trigger.
+	defer time.Sleep(minStepDuration)
 
 	if len(s.exec) == 0 {
 		err := ErrEmptyExecutorsList
