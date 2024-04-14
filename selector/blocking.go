@@ -2,13 +2,20 @@ package selector
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/zalgonoise/micron/executor"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type blockingSelector struct {
 	exec []executor.Executor
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
 }
 
 // Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
@@ -22,18 +29,41 @@ type blockingSelector struct {
 //
 // The error returned from a Next call is the error raised by the executor.Executor's Exec call.
 func (s blockingSelector) Next(ctx context.Context) error {
-	// minStepDuration ensures that each execution is locked to the seconds mark and
-	// a runner is not executed more than once per trigger.
-	defer time.Sleep(minStepDuration)
+	ctx, span := s.tracer.Start(ctx, "Selector.Select")
+	defer span.End()
+
+	s.metrics.IncSelectorSelectCalls()
+	s.logger.InfoContext(ctx, "selecting the next task")
+
+	defer func() {
+		// minStepDuration ensures that each execution is locked to the seconds mark and
+		// a runner is not executed more than once per trigger.
+		time.Sleep(minStepDuration)
+	}()
+
+	var err error
 
 	switch len(s.exec) {
 	case 0:
-		return ErrEmptyExecutorsList
+		err = ErrEmptyExecutorsList
 	case 1:
-		return s.exec[0].Exec(ctx)
+		err = s.exec[0].Exec(ctx)
 	default:
-		return executor.Multi(ctx, s.next(ctx)...)
+		err = executor.Multi(ctx, s.next(ctx)...)
 	}
+
+	if err != nil {
+		s.metrics.IncSelectorSelectCalls()
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		s.logger.ErrorContext(ctx, "no tasks configured for execution",
+			slog.String("error", err.Error()),
+		)
+
+		return err
+	}
+
+	return nil
 }
 
 func (s blockingSelector) next(ctx context.Context) []executor.Executor {
