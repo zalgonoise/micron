@@ -1,56 +1,34 @@
 package schedule
 
 import (
-	"context"
-	"time"
-
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
-type withTrace struct {
-	s      Scheduler
-	tracer trace.Tracer
-}
-
-// Next calculates and returns the following scheduled time, from the input time.Time.
-func (s withTrace) Next(ctx context.Context, now time.Time) time.Time {
-	ctx, span := s.tracer.Start(ctx, "Scheduler.Next")
-	defer span.End()
-
-	next := s.s.Next(ctx, now)
-
-	span.SetAttributes(attribute.String("at", next.Format(time.RFC3339)))
-
-	return next
-}
-
-// AddTraces decorates the input Scheduler with tracing, using the input trace.Tracer.
+// AddTraces replaces the input Scheduler's tracer with a different one, using the input trace.Tracer.
 //
-// If the input Scheduler is nil or a no-op Scheduler, a no-op Scheduler is returned. If the input trace.Tracer is nil,
-// then the input Scheduler is returned as-is.
+// If the input tracer is nil, the Scheduler's tracer will be set to be a no-op.
 //
-// If the input Scheduler is already a Scheduler with tracing, then this Scheduler with tracing is returned with the new
-// trace.Tracer configured in place of the former.
+// If the input Scheduler is nil or a no-op Scheduler, a no-op Scheduler is returned.
 //
-// Otherwise, the Scheduler is decorated with tracing within a custom type that implements Scheduler.
+// If the input Scheduler is a valid Scheduler, then its tracer is replaced with the input one.
+//
+// Otherwise, the Scheduler is returned as-is.
 func AddTraces(s Scheduler, tracer trace.Tracer) Scheduler {
+	if tracer == nil {
+		tracer = noop.NewTracerProvider().Tracer("scheduler's no-op tracer")
+	}
+
 	if s == nil || s == NoOp() {
 		return NoOp()
 	}
 
-	if tracer == nil {
+	sched, ok := s.(*CronSchedule)
+	if !ok {
 		return s
 	}
 
-	if traced, ok := s.(withTrace); ok {
-		traced.tracer = tracer
+	sched.tracer = tracer
 
-		return traced
-	}
-
-	return withTrace{
-		s:      s,
-		tracer: tracer,
-	}
+	return sched
 }
