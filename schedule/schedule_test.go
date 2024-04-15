@@ -181,97 +181,87 @@ func TestSchedulerWithLogs(t *testing.T) {
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
 		},
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name           string
-		s              Scheduler
-		handler        slog.Handler
-		wants          Scheduler
-		defaultHandler bool
+		name         string
+		s            Scheduler
+		handler      slog.Handler
+		nilHandler   bool
+		nilScheduler bool
+		noOpSched    bool
 	}{
 		{
-			name:  "NilScheduler",
-			wants: noOpScheduler{},
+			name:         "NilScheduler",
+			nilScheduler: true,
 		},
 		{
-			name:  "NoOpScheduler",
-			s:     noOpScheduler{},
-			wants: noOpScheduler{},
+			name:      "NoOpScheduler",
+			s:         noOpScheduler{},
+			noOpSched: true,
 		},
 		{
-			name: "NilHandler",
-			s:    s,
-			wants: withLogs{
-				s: s,
-			},
-			defaultHandler: true,
+			name:       "NilHandler",
+			s:          s,
+			nilHandler: true,
 		},
 		{
 			name:    "WithHandler",
 			s:       s,
 			handler: h,
-			wants: withLogs{
-				s:      s,
-				logger: slog.New(h),
-			},
 		},
 		{
 			name:    "NoOpHandler",
 			s:       s,
 			handler: log.NoOp(),
-			wants: withLogs{
-				s: s,
-			},
-			defaultHandler: true,
 		},
 		{
 			name: "ReplaceHandler",
-			s: withLogs{
-				s: s,
+			s: &CronSchedule{
+				Loc: time.Local,
+				Schedule: cronlex.Schedule{
+					Sec:      resolve.Everytime{},
+					Min:      resolve.Everytime{},
+					Hour:     resolve.Everytime{},
+					DayMonth: resolve.Everytime{},
+					Month:    resolve.Everytime{},
+					DayWeek:  resolve.Everytime{},
+				},
+				logger:  slog.New(log.NoOp()),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
 			handler: h,
-			wants: withLogs{
-				s:      s,
-				logger: slog.New(h),
-			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			s := AddLogs(testcase.s, testcase.handler)
+			cronScheduler := AddLogs(testcase.s, testcase.handler)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			_ = s.Next(ctx, time.Time{})
+			_ = cronScheduler.Next(ctx, time.Time{})
 
-			switch sched := s.(type) {
-			case *CronSchedule, noOpScheduler:
-				is.Equal(t, testcase.wants, s)
-			case withLogs:
-				wants, ok := testcase.wants.(withLogs)
-				is.True(t, ok)
-
-				is.Equal(t, wants.s, sched.s)
-
-				if testcase.defaultHandler {
-					is.True(t, sched.logger.Handler() != nil)
-
-					return
+			switch sched := cronScheduler.(type) {
+			case noOpScheduler:
+				is.True(t, testcase.nilScheduler || testcase.noOpSched)
+			case *CronSchedule:
+				switch {
+				case testcase.handler == nil:
+					is.True(t, testcase.nilHandler)
+				default:
+					is.Equal(t, testcase.handler, sched.logger.Handler())
 				}
-
-				is.Equal(t, wants.logger.Handler(), sched.logger.Handler())
 			}
 		})
 	}
 }
 
-type testMetrics struct{}
-
-func (testMetrics) IncSchedulerNextCalls() {}
-
 func TestSchedulerWithMetrics(t *testing.T) {
-	m := testMetrics{}
+	m := metrics.NoOp()
 	s := &CronSchedule{
 		Loc: time.Local,
 		Schedule: cronlex.Schedule{
@@ -282,77 +272,87 @@ func TestSchedulerWithMetrics(t *testing.T) {
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
 		},
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name  string
-		s     Scheduler
-		m     Metrics
-		wants Scheduler
+		name         string
+		s            Scheduler
+		m            Metrics
+		nilMetrics   bool
+		nilScheduler bool
+		noOpSched    bool
 	}{
 		{
-			name:  "NilScheduler",
-			wants: noOpScheduler{},
+			name:         "NilScheduler",
+			nilScheduler: true,
 		},
 		{
-			name:  "NoOpScheduler",
-			s:     noOpScheduler{},
-			wants: noOpScheduler{},
+			name:      "NoOpScheduler",
+			s:         noOpScheduler{},
+			noOpSched: true,
 		},
 		{
-			name:  "NilMetrics",
-			s:     s,
-			wants: s,
+			name:       "NilMetrics",
+			s:          s,
+			nilMetrics: true,
 		},
 		{
 			name: "WithMetrics",
 			s:    s,
 			m:    m,
-			wants: withMetrics{
-				s: s,
-				m: m,
-			},
 		},
 		{
-			name:  "NoOpMetrics",
-			s:     s,
-			m:     metrics.NoOp(),
-			wants: s,
+			name: "NoOpMetrics",
+			s:    s,
+			m:    metrics.NoOp(),
 		},
 		{
 			name: "ReplaceMetrics",
-			s: withMetrics{
-				s: s,
+			s: &CronSchedule{
+				Loc: time.Local,
+				Schedule: cronlex.Schedule{
+					Sec:      resolve.Everytime{},
+					Min:      resolve.Everytime{},
+					Hour:     resolve.Everytime{},
+					DayMonth: resolve.Everytime{},
+					Month:    resolve.Everytime{},
+					DayWeek:  resolve.Everytime{},
+				},
+				logger:  slog.New(log.NoOp()),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
 			m: m,
-			wants: withMetrics{
-				s: s,
-				m: m,
-			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			s := AddMetrics(testcase.s, testcase.m)
+			cronScheduler := AddMetrics(testcase.s, testcase.m)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			_ = s.Next(ctx, time.Time{})
+			_ = cronScheduler.Next(ctx, time.Time{})
 
-			switch sched := s.(type) {
+			switch sched := cronScheduler.(type) {
 			case noOpScheduler:
-				is.Equal(t, testcase.wants, s)
-			case withMetrics:
-				wants, ok := testcase.wants.(withMetrics)
-				is.True(t, ok)
-				is.Equal(t, wants.s, sched.s)
-				is.Equal(t, wants.m, sched.m)
+				is.True(t, testcase.nilScheduler || testcase.noOpSched)
+			case *CronSchedule:
+				switch {
+				case testcase.m == nil:
+					is.True(t, testcase.nilMetrics)
+				default:
+					is.Equal(t, testcase.m, sched.metrics)
+				}
 			}
 		})
 	}
 }
 
 func TestSchedulerWithTrace(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
 	s := &CronSchedule{
 		Loc: time.Local,
 		Schedule: cronlex.Schedule{
@@ -363,65 +363,75 @@ func TestSchedulerWithTrace(t *testing.T) {
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
 		},
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
 	for _, testcase := range []struct {
-		name   string
-		s      Scheduler
-		tracer trace.Tracer
-		wants  Scheduler
+		name        string
+		s           Scheduler
+		tracer      trace.Tracer
+		nilTracer   bool
+		nilSchedule bool
+		noOpSched   bool
 	}{
 		{
-			name:  "NilScheduler",
-			wants: noOpScheduler{},
+			name:        "NilScheduler",
+			nilSchedule: true,
 		},
 		{
-			name:  "NoOpScheduler",
-			s:     noOpScheduler{},
-			wants: noOpScheduler{},
+			name:      "NoOpScheduler",
+			s:         noOpScheduler{},
+			noOpSched: true,
 		},
 		{
-			name:  "NilTracer",
-			s:     s,
-			wants: s,
+			name:      "NilTracer",
+			s:         s,
+			nilTracer: true,
 		},
 		{
 			name:   "WithTracer",
 			s:      s,
-			tracer: noop.NewTracerProvider().Tracer("test"),
-			wants: withTrace{
-				s:      s,
-				tracer: noop.NewTracerProvider().Tracer("test"),
-			},
+			tracer: tracer,
 		},
 		{
 			name: "ReplaceTracer",
-			s: withTrace{
-				s: s,
+			s: &CronSchedule{
+				Loc: time.Local,
+				Schedule: cronlex.Schedule{
+					Sec:      resolve.Everytime{},
+					Min:      resolve.Everytime{},
+					Hour:     resolve.Everytime{},
+					DayMonth: resolve.Everytime{},
+					Month:    resolve.Everytime{},
+					DayWeek:  resolve.Everytime{},
+				},
+				logger:  slog.New(log.NoOp()),
+				metrics: metrics.NoOp(),
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			},
-			tracer: noop.NewTracerProvider().Tracer("test"),
-			wants: withTrace{
-				s:      s,
-				tracer: noop.NewTracerProvider().Tracer("test"),
-			},
+			tracer: tracer,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			s := AddTraces(testcase.s, testcase.tracer)
+			cronScheduler := AddTraces(testcase.s, testcase.tracer)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			_ = s.Next(ctx, time.Time{})
+			_ = cronScheduler.Next(ctx, time.Time{})
 
-			switch sched := s.(type) {
+			switch sched := cronScheduler.(type) {
 			case noOpScheduler:
-				is.Equal(t, testcase.wants, s)
-			case withTrace:
-				wants, ok := testcase.wants.(withTrace)
-				is.True(t, ok)
-				is.Equal(t, wants.s, sched.s)
-				is.Equal(t, wants.tracer, sched.tracer)
+				is.True(t, testcase.nilSchedule || testcase.noOpSched)
+			case *CronSchedule:
+				switch {
+				case testcase.tracer == nil:
+					is.True(t, testcase.nilTracer)
+				default:
+					is.Equal(t, testcase.tracer, sched.tracer)
+				}
 			}
 		})
 	}
