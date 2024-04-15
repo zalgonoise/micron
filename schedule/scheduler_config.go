@@ -6,6 +6,10 @@ import (
 
 	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 )
 
 type Config struct {
@@ -15,6 +19,14 @@ type Config struct {
 	handler slog.Handler
 	metrics Metrics
 	tracer  trace.Tracer
+}
+
+func defaultConfig() Config {
+	return Config{
+		handler: log.NoOp(),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("scheduler's no-op tracer"),
+	}
 }
 
 // WithSchedule configures the Scheduler with the input cron string.
