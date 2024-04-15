@@ -2,9 +2,12 @@ package schedule
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/zalgonoise/cfg"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zalgonoise/micron/schedule/cronlex"
 	"github.com/zalgonoise/micron/schedule/resolve"
@@ -30,6 +33,12 @@ type Scheduler interface {
 	Next(ctx context.Context, now time.Time) time.Time
 }
 
+// Metrics describes the actions that register Scheduler-related metrics.
+type Metrics interface {
+	// IncSchedulerNextCalls increases the count of Next calls, by the Scheduler.
+	IncSchedulerNextCalls()
+}
+
 // CronSchedule represents a basic implementation of a Scheduler, following the cron schedule specification.
 //
 // It is composed of a time.Location specifier, as well as a cronlex.Schedule definition.
@@ -38,10 +47,19 @@ type CronSchedule struct {
 	Loc *time.Location
 	// Schedule describes the schedule frequency definition, with different cron schedule elements.
 	Schedule cronlex.Schedule
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
 }
 
 // Next calculates and returns the following scheduled time, from the input time.Time.
-func (s *CronSchedule) Next(_ context.Context, t time.Time) time.Time {
+func (s *CronSchedule) Next(ctx context.Context, t time.Time) time.Time {
+	ctx, span := s.tracer.Start(ctx, "Scheduler.Next")
+	defer span.End()
+
+	s.metrics.IncSchedulerNextCalls()
+
 	year, month, day := t.Date()
 	hour := t.Hour()
 	minute := t.Minute()
@@ -71,6 +89,9 @@ func (s *CronSchedule) Next(_ context.Context, t time.Time) time.Time {
 
 	// short circuit if unset or star '*'
 	if _, ok := (s.Schedule.DayWeek).(resolve.Everytime); s.Schedule.DayWeek == nil || ok {
+		span.SetAttributes(attribute.String("at", dayOfMonthTime.Format(time.RFC3339)))
+		s.logger.InfoContext(ctx, "next job", slog.Time("at", dayOfMonthTime))
+
 		return dayOfMonthTime
 	}
 
@@ -87,6 +108,9 @@ func (s *CronSchedule) Next(_ context.Context, t time.Time) time.Time {
 		0, s.Loc,
 	)
 
+	span.SetAttributes(attribute.String("at", weekdayTime.Format(time.RFC3339)))
+	s.logger.InfoContext(ctx, "next job", slog.Time("at", weekdayTime))
+
 	return weekdayTime
 }
 
@@ -96,23 +120,11 @@ func (s *CronSchedule) Next(_ context.Context, t time.Time) time.Time {
 //
 // If a time.Location is not specified with the WithLocation option, then time.Local is used.
 func New(options ...cfg.Option[Config]) (Scheduler, error) {
-	config := cfg.New(options...)
+	config := cfg.Set(defaultConfig(), options...)
 
 	cron, err := newScheduler(config)
 	if err != nil {
 		return noOpScheduler{}, err
-	}
-
-	if config.metrics != nil {
-		cron = AddMetrics(cron, config.metrics)
-	}
-
-	if config.handler != nil {
-		cron = AddLogs(cron, config.handler)
-	}
-
-	if config.tracer != nil {
-		cron = AddTraces(cron, config.tracer)
 	}
 
 	return cron, nil
@@ -132,6 +144,10 @@ func newScheduler(config Config) (Scheduler, error) {
 	return &CronSchedule{
 		Loc:      config.loc,
 		Schedule: sched,
+
+		logger:  slog.New(config.handler),
+		metrics: config.metrics,
+		tracer:  config.tracer,
 	}, nil
 }
 
