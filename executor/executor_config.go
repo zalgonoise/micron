@@ -14,11 +14,9 @@ import (
 )
 
 type Config struct {
-	scheduler schedule.Scheduler
+	scheduler Scheduler
 	cron      string
 	loc       *time.Location
-
-	runners []Runner
 
 	handler slog.Handler
 	metrics Metrics
@@ -33,44 +31,12 @@ func defaultConfig() *Config {
 	}
 }
 
-// WithRunners configures the Executor with the input Runner(s).
-//
-// This call returns a cfg.NoOp cfg.Option if no runners are provided, or if the ones provided are all
-// nil. Any nil Runner or Runnable will be ignored.
-func WithRunners(runners ...Runner) cfg.Option[*Config] {
-	r := make([]Runner, 0, len(runners))
-
-	for i := range runners {
-		if runners[i] == nil {
-			continue
-		}
-
-		r = append(r, runners[i])
-	}
-
-	if len(r) == 0 {
-		return cfg.NoOp[*Config]{}
-	}
-
-	return cfg.Register(func(config *Config) *Config {
-		if len(config.runners) == 0 {
-			config.runners = r
-
-			return config
-		}
-
-		config.runners = append(config.runners, r...)
-
-		return config
-	})
-}
-
 // WithScheduler configures the Executor with the input schedule.Scheduler.
 //
 // This call returns a cfg.NoOp cfg.Option if the input schedule.Scheduler is either nil or a no-op.
 //
 // Using this option does not require passing WithSchedule nor WithLocation options.
-func WithScheduler(sched schedule.Scheduler) cfg.Option[*Config] {
+func WithScheduler(sched Scheduler) cfg.Option[*Config] {
 	if sched == nil || sched == schedule.NoOp() {
 		return cfg.NoOp[*Config]{}
 	}
