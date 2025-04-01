@@ -15,7 +15,6 @@ import (
 
 type Config struct {
 	exec    []executor.Executor
-	block   bool
 	timeout time.Duration
 
 	handler slog.Handler
@@ -58,21 +57,6 @@ func WithExecutors(executors ...executor.Executor) cfg.Option[*Config] {
 		}
 
 		config.exec = append(config.exec, execs...)
-
-		return config
-	})
-}
-
-// WithBlock configures the Selector to block (wait) for the underlying executor.Executor to complete the task.
-//
-// By default, the returned Selector from New is a non-blocking Selector. It mostly relies on the setup of the
-// components to at least register the error as metrics or logs, but Exec calls return nil errors if the local context
-// times out.
-//
-// WithBlock waits until the execution is done, so an accurate error value is returned from the Selector.
-func WithBlock() cfg.Option[*Config] {
-	return cfg.Register(func(config *Config) *Config {
-		config.block = true
 
 		return config
 	})

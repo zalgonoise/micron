@@ -26,31 +26,6 @@ const (
 
 var ErrEmptyExecutorsList = errs.WithDomain(errSelectorDomain, ErrEmpty, ErrExecutorsList)
 
-// Selector describes the capabilities of a cron selector, which picks up the next job to execute (out of a set of
-// executor.Executor)
-//
-// Implementations of Selector must focus on the logic within its only method, Next, that will set the strategy to
-// picking up the following job to run. The default implementation looks for the nearest job (in time) to execute, with
-// support for multiple executions in one-go.
-//
-// Custom implementations could, for example, check for preconditions, run clean-up jobs, and more.
-//
-// The runtime of a Selector depends on the input context.Context when calling its Next method, as it can be used to
-// signal cancellation or used for timeouts.
-type Selector interface {
-	// Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
-	// calls its Exec method.
-	//
-	// This call also imposes a minimum step duration of 50ms, to ensure that early-runs are not executed twice due to the
-	// nature of using clocks in Go. This sleep is deferred to come in after the actual execution of the job.
-	//
-	// The Selector allows multiple executor.Executor to be configured, and multiple executor.Executor can share similar
-	// execution times. If that is the case, the executor is launched in an executor.Multi call.
-	//
-	// The error returned from a Next call is the error raised by the executor.Executor's Exec call.
-	Next(ctx context.Context) error
-}
-
 // Metrics describes the actions that register Selector-related metrics.
 type Metrics interface {
 	// IncSelectorSelectCalls increases the count of Select calls, by the Selector.
@@ -59,7 +34,7 @@ type Metrics interface {
 	IncSelectorSelectErrors()
 }
 
-type selector struct {
+type Selector struct {
 	timeout time.Duration
 	exec    []executor.Executor
 
@@ -78,7 +53,7 @@ type selector struct {
 // execution times. If that is the case, the executor is launched in an executor.Multi call.
 //
 // The error returned from a Next call is the error raised by the executor.Executor's Exec call.
-func (s *selector) Next(ctx context.Context) error {
+func (s *Selector) Next(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "Selector.Select")
 	defer span.End()
 
@@ -150,7 +125,7 @@ func (s *selector) Next(ctx context.Context) error {
 	}
 }
 
-func (s *selector) next(ctx context.Context) []executor.Executor {
+func (s *Selector) next(ctx context.Context) []executor.Executor {
 	var (
 		next time.Duration
 		exec = make([]executor.Executor, 0, len(s.exec))
@@ -187,36 +162,18 @@ func (s *selector) next(ctx context.Context) []executor.Executor {
 //
 // Creating a Selector requires at least one executor.Executor, which can be added through the WithExecutors option. To
 // allow this configuration to be variadic as well, it is served as a cfg.Option.
-func New(options ...cfg.Option[*Config]) (Selector, error) {
+func New(options ...cfg.Option[*Config]) (*Selector, error) {
 	config := cfg.Set(defaultConfig(), options...)
 
-	sel, err := newSelector(config)
-	if err != nil {
-		return noOpSelector{}, err
-	}
-
-	return sel, nil
-}
-
-func newSelector(config *Config) (Selector, error) {
 	if len(config.exec) == 0 {
-		return noOpSelector{}, ErrEmptyExecutorsList
-	}
-
-	if config.block {
-		return &blockingSelector{
-			exec:    config.exec,
-			logger:  slog.New(config.handler),
-			metrics: config.metrics,
-			tracer:  config.tracer,
-		}, nil
+		return nil, ErrEmptyExecutorsList
 	}
 
 	if config.timeout < minStepDuration {
 		config.timeout = defaultTimeout
 	}
 
-	return &selector{
+	return &Selector{
 		timeout: config.timeout,
 		exec:    config.exec,
 		logger:  slog.New(config.handler),
@@ -225,8 +182,23 @@ func newSelector(config *Config) (Selector, error) {
 	}, nil
 }
 
+func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, error) {
+	config := cfg.Set(defaultConfig(), options...)
+
+	if len(config.exec) == 0 {
+		return nil, ErrEmptyExecutorsList
+	}
+
+	return &BlockingSelector{
+		exec:    config.exec,
+		logger:  slog.New(config.handler),
+		metrics: config.metrics,
+		tracer:  config.tracer,
+	}, nil
+}
+
 // NoOp returns a no-op Selector.
-func NoOp() Selector {
+func NoOp() noOpSelector {
 	return noOpSelector{}
 }
 

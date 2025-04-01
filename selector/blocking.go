@@ -11,7 +11,7 @@ import (
 	"github.com/zalgonoise/micron/executor"
 )
 
-type blockingSelector struct {
+type BlockingSelector struct {
 	exec []executor.Executor
 
 	logger  *slog.Logger
@@ -29,7 +29,7 @@ type blockingSelector struct {
 // execution times. If that is the case, the executor is launched in an executor.Multi call.
 //
 // The error returned from a Next call is the error raised by the executor.Executor's Exec call.
-func (s *blockingSelector) Next(ctx context.Context) error {
+func (s *BlockingSelector) Next(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "Selector.Select")
 	defer span.End()
 
@@ -65,7 +65,7 @@ func (s *blockingSelector) Next(ctx context.Context) error {
 	return nil
 }
 
-func (s *blockingSelector) next(ctx context.Context) []executor.Executor {
+func (s *BlockingSelector) next(ctx context.Context) []executor.Executor {
 	var (
 		next time.Duration
 		exec = make([]executor.Executor, 0, len(s.exec))

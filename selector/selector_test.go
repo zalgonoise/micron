@@ -3,14 +3,12 @@ package selector
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/is"
-	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/zalgonoise/micron/executor"
@@ -24,8 +22,7 @@ func TestConfig(t *testing.T) {
 	})
 	cron := "* * * * * *"
 
-	exec, err := executor.New("test",
-		executor.WithRunners(runner),
+	exec, err := executor.New("test", []executor.Runner{runner},
 		executor.WithSchedule(cron),
 	)
 	is.Empty(t, err)
@@ -51,12 +48,6 @@ func TestConfig(t *testing.T) {
 			opts: []cfg.Option[*Config]{
 				WithExecutors(exec),
 				WithExecutors(exec),
-			},
-		},
-		{
-			name: "WithBlock",
-			opts: []cfg.Option[*Config]{
-				WithBlock(),
 			},
 		},
 		{
@@ -139,283 +130,6 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-func TestSelectorWithLogs(t *testing.T) {
-	h := slog.NewJSONHandler(io.Discard, nil)
-	s := &selector{
-		exec: []executor.Executor{executor.NoOp()},
-
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name        string
-		s           Selector
-		handler     slog.Handler
-		nilHandler  bool
-		nilSelector bool
-		noOpSel     bool
-	}{
-		{
-			name:        "NilSelector",
-			nilSelector: true,
-		},
-		{
-			name:    "NoOpSelector",
-			s:       noOpSelector{},
-			noOpSel: true,
-		},
-		{
-			name:       "NilHandler",
-			s:          s,
-			nilHandler: true,
-		},
-		{
-			name:    "WithHandler",
-			s:       s,
-			handler: h,
-		},
-		{
-			name:    "WithNoOpHandler",
-			s:       s,
-			handler: log.NoOp(),
-		},
-		{
-			name: "ReplaceHandler",
-			s: &blockingSelector{
-				exec: []executor.Executor{executor.NoOp()},
-
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			handler: h,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronSelector := AddLogs(testcase.s, testcase.handler)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-
-			switch sel := cronSelector.(type) {
-			case noOpSelector:
-				is.True(t, testcase.nilSelector || testcase.noOpSel)
-
-				return
-			case *selector:
-				switch {
-				case testcase.handler == nil:
-					is.True(t, testcase.nilHandler)
-				default:
-					is.Equal(t, testcase.handler, sel.logger.Handler())
-				}
-			case *blockingSelector:
-				switch {
-				case testcase.handler == nil:
-					is.True(t, testcase.nilHandler)
-				default:
-					is.Equal(t, testcase.handler, sel.logger.Handler())
-				}
-			}
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-		})
-	}
-}
-
-type testSelector struct{}
-
-func (testSelector) Next(ctx context.Context) error { return ctx.Err() }
-
-func TestSelectorWithMetrics(t *testing.T) {
-	m := metrics.NoOp()
-	s := &selector{
-		exec: []executor.Executor{executor.NoOp()},
-
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name        string
-		s           Selector
-		m           Metrics
-		nilMetrics  bool
-		nilSelector bool
-		noOpSel     bool
-	}{
-		{
-			name:        "NilSelector",
-			nilSelector: true,
-		},
-		{
-			name:    "NoOpSelector",
-			s:       noOpSelector{},
-			noOpSel: true,
-		},
-		{
-			name:       "NilMetrics",
-			s:          s,
-			nilMetrics: true,
-		},
-		{
-			name: "NoOpMetrics",
-			s:    s,
-			m:    metrics.NoOp(),
-		},
-		{
-			name: "WithMetrics",
-			s:    s,
-			m:    m,
-		},
-		{
-			name: "ReplaceMetrics",
-			s: &blockingSelector{
-				exec: []executor.Executor{executor.NoOp()},
-
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			m: m,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronSelector := AddMetrics(testcase.s, testcase.m)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-
-			switch sel := cronSelector.(type) {
-			case noOpSelector:
-				is.True(t, testcase.nilSelector || testcase.noOpSel)
-
-				return
-			case *selector:
-				switch {
-				case testcase.m == nil:
-					is.True(t, testcase.nilMetrics)
-				default:
-					is.Equal(t, testcase.m, sel.metrics)
-				}
-			case *blockingSelector:
-				switch {
-				case testcase.m == nil:
-					is.True(t, testcase.nilMetrics)
-				default:
-					is.Equal(t, testcase.m, sel.metrics)
-				}
-			}
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-		})
-	}
-
-	t.Run("ErrorOnNext", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		//nolint:errcheck // unit test with expected error
-		_ = AddMetrics(testSelector{}, m).Next(ctx)
-	})
-}
-
-func TestSelectorWithTrace(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	s := &selector{
-		exec: []executor.Executor{executor.NoOp()},
-
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name        string
-		s           Selector
-		tracer      trace.Tracer
-		nilTracer   bool
-		nilSelector bool
-		noOpSel     bool
-	}{
-		{
-			name:        "NilSelector",
-			nilSelector: true,
-		},
-		{
-			name:    "NoOpSelector",
-			s:       noOpSelector{},
-			noOpSel: true,
-		},
-		{
-			name:      "NilTracer",
-			s:         s,
-			nilTracer: true,
-		},
-		{
-			name:   "WithTracer",
-			s:      s,
-			tracer: tracer,
-		},
-		{
-			name: "ReplaceTracer",
-			s: &selector{
-				exec: []executor.Executor{executor.NoOp()},
-
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			tracer: tracer,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronSelector := AddTraces(testcase.s, testcase.tracer)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-
-			switch sel := cronSelector.(type) {
-			case noOpSelector:
-				is.True(t, testcase.nilSelector || testcase.noOpSel)
-
-				return
-			case *selector:
-				switch {
-				case testcase.tracer == nil:
-					is.True(t, testcase.nilTracer)
-				default:
-					is.Equal(t, testcase.tracer, sel.tracer)
-				}
-			case *blockingSelector:
-				switch {
-				case testcase.tracer == nil:
-					is.True(t, testcase.nilTracer)
-				default:
-					is.Equal(t, testcase.tracer, sel.tracer)
-				}
-			}
-
-			//nolint:errcheck // unit test with no-ops configured
-			_ = cronSelector.Next(ctx)
-		})
-	}
-}
-
 func TestNoOp(t *testing.T) {
 	noOp := NoOp()
 
@@ -450,8 +164,7 @@ func TestWithObservability(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			exec, err := executor.New("test",
-				executor.WithRunners(testcase.runner),
+			exec, err := executor.New("test", []executor.Runner{testcase.runner},
 				executor.WithSchedule(cron),
 			)
 			is.Empty(t, err)
@@ -475,7 +188,7 @@ func TestZeroExecutors(t *testing.T) {
 	t.Run("WithBlock/FromRawSelector", func(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
-			(&blockingSelector{
+			(&BlockingSelector{
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),
@@ -485,7 +198,7 @@ func TestZeroExecutors(t *testing.T) {
 	t.Run("NonBlocking/FromRawSelector", func(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
-			(&selector{
+			(&Selector{
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),
