@@ -97,10 +97,9 @@ func TestCron(t *testing.T) {
 
 			var n int
 			for cron, runners := range testcase.execMap {
-				exec, err := executor.New(fmt.Sprintf("%d", n),
+				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
 					executor.WithSchedule(cron),
 					executor.WithLocation(time.Local),
-					executor.WithRunners(runners...),
 					executor.WithLogHandler(h),
 				)
 				is.Empty(t, err)
@@ -165,10 +164,9 @@ func TestFillErrorBuffer(t *testing.T) {
 	results := make([]int, 0, 2)
 	wants := []int{1, 1}
 
-	exec, err := executor.New("test_exec",
+	exec, err := executor.New("test_exec", []executor.Runner{runner1},
 		executor.WithSchedule("* * * * * *"),
 		executor.WithLocation(time.Local),
-		executor.WithRunners(runner1),
 		executor.WithLogHandler(h),
 	)
 	is.Empty(t, err)

@@ -22,7 +22,7 @@ const (
 type Config struct {
 	errBufferSize int
 
-	sel   selector.Selector
+	sel   Selector
 	execs []executor.Executor
 
 	handler slog.Handler
@@ -35,7 +35,7 @@ func defaultConfig() *Config {
 		errBufferSize: minBufferSize,
 		handler:       log.NoOp(),
 		metrics:       metrics.NoOp(),
-		tracer:        noop.NewTracerProvider().Tracer("runtime's no-op tracer"),
+		tracer:        noop.NewTracerProvider().Tracer("no-op tracer"),
 	}
 }
 
@@ -43,7 +43,7 @@ func defaultConfig() *Config {
 //
 // This call returns a cfg.NoOp cfg.Option if the input selector.Selector is nil, or if it is a
 // selector.NoOp type.
-func WithSelector(sel selector.Selector) cfg.Option[*Config] {
+func WithSelector(sel Selector) cfg.Option[*Config] {
 	if sel == nil || sel == selector.NoOp() {
 		return cfg.NoOp[*Config]{}
 	}
@@ -74,9 +74,8 @@ func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[*Config] {
 		id = cron
 	}
 
-	exec, err := executor.New(id,
+	exec, err := executor.New(id, runners,
 		executor.WithSchedule(cron),
-		executor.WithRunners(runners...),
 	)
 	if err != nil {
 		return cfg.NoOp[*Config]{}
