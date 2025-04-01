@@ -98,10 +98,9 @@ func TestSelector(t *testing.T) {
 
 				var n int
 				for cron, runners := range testcase.execMap {
-					exec, err := executor.New(fmt.Sprintf("%d", n),
+					exec, err := executor.New(fmt.Sprintf("%d", n), runners,
 						executor.WithSchedule(cron),
 						executor.WithLocation(time.Local),
-						executor.WithRunners(runners...),
 						executor.WithLogHandler(h),
 					)
 					is.Empty(t, err)
@@ -115,11 +114,12 @@ func TestSelector(t *testing.T) {
 					selector.WithLogHandler(h),
 				}
 
-				if withBlock {
-					selectorOpts = append(selectorOpts, selector.WithBlock())
-				}
+				var (
+					sel *selector.Selector
+					err error
+				)
 
-				sel, err := selector.New(selectorOpts...)
+				sel, err = selector.New(selectorOpts...)
 
 				is.Empty(t, err)
 
@@ -180,14 +180,14 @@ func TestNonBlocking(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	exec, err := executor.New("test",
-		executor.WithSchedule(cron),
-		executor.WithLocation(time.Local),
-		executor.WithRunners(executor.Runnable(func(ctx context.Context) error {
+	exec, err := executor.New("test", []executor.Runner{
+		executor.Runnable(func(ctx context.Context) error {
 			<-time.After(100 * time.Millisecond)
 
 			return testErr
-		})),
+		})},
+		executor.WithSchedule(cron),
+		executor.WithLocation(time.Local),
 		executor.WithLogHandler(h),
 	)
 	is.Empty(t, err)
