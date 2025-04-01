@@ -11,7 +11,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule"
 )
 
@@ -32,6 +35,21 @@ var (
 	ErrEmptyRunnerList = errs.WithDomain(errDomain, ErrEmpty, ErrRunnerList)
 	ErrEmptyScheduler  = errs.WithDomain(errDomain, ErrEmpty, ErrScheduler)
 )
+
+// Scheduler describes the capabilities of a cron job scheduler. Its sole responsibility is to provide
+// the timestamp for the next job's execution, after calculating its frequency from its configuration.
+//
+// Scheduler exposes one method, Next, that takes in a context.Context and a time.Time. It is implied that the
+// input time is the time.Now value, however it is open to any input that the caller desires to pass to it. The returned
+// time.Time value must always be the following occurrence according to the schedule, in the context of the input time.
+//
+// Implementations of Next should take into consideration the cron specification; however the interface allows a custom
+// approach to the scheduler, especially if added functionality is necessary (e.g. frequency overriding schedulers,
+// dynamic frequencies, and pipeline-approaches where the frequency is evaluated after a certain check).
+type Scheduler interface {
+	// Next calculates and returns the following scheduled time, from the input time.Time.
+	Next(ctx context.Context, now time.Time) time.Time
+}
 
 // Runner describes a type that executes a job or task. It contains only one method, Run, that is called with a
 // context as input and returns an error.
@@ -71,34 +89,6 @@ func (r Runnable) Run(ctx context.Context) error {
 	return r(ctx)
 }
 
-// Executor describes the capabilities of cron job's executor component, which is based on fetching the next execution's
-// time, Next; as well as running the job, Exec. It also exposes an ID method to allow access to this Executor's
-// configured ID or name.
-//
-// Implementations of Executor must focus on the logic of the Exec method, which should contain the logic of the Next
-// method as well. It should not be the responsibility of other components to wait until it is time to execute the job;
-// but actually the Executor's responsibility to consider it in its Exec method. That being said, its Next method (just
-// like its ID method) allows access to some of the details of the executor if the caller needs that information; as
-// helpers.
-//
-// The logic behind Next and generally calculating the time for the next job execution should be deferred to a
-// schedule.Scheduler, which should be part of the Executor.
-//
-// One Executor may contain multiple Runner, as a job may be composed of several (smaller) tasks. However, an Executor
-// is identified by a single ID.
-type Executor interface {
-	// Exec runs the task when on its scheduled time.
-	//
-	// For this, Exec leverages the Executor's underlying schedule.Scheduler to retrieve the job's next execution time,
-	// waits for it, and calls Runner.Run on each configured Runner. All raised errors are joined and returned at the end
-	// of this call.
-	Exec(ctx context.Context) error
-	// Next calls the Executor's underlying schedule.Scheduler Next method.
-	Next(ctx context.Context) time.Time
-	// ID returns this Executor's ID.
-	ID() string
-}
-
 // Metrics describes the actions that register Executor-related metrics.
 type Metrics interface {
 	// IncExecutorExecCalls increases the count of Exec calls, by the Executor.
@@ -115,7 +105,7 @@ type Metrics interface {
 // execution time, and supports multiple Runner.
 type Executable struct {
 	id      string
-	cron    schedule.Scheduler
+	cron    Scheduler
 	runners []Runner
 
 	logger  *slog.Logger
@@ -233,27 +223,18 @@ func (e *Executable) ID() string {
 // WithScheduler option -- alternatively, callers can simply pass a cron string directly using the WithSchedule option.
 //
 // If an ID is not supplied, then the default ID of `micron.executor` is set.
-func New(id string, options ...cfg.Option[*Config]) (Executor, error) {
+func New(id string, runners []Runner, options ...cfg.Option[*Config]) (*Executable, error) {
 	config := cfg.Set(defaultConfig(), options...)
 
-	return newExecutable(id, config)
-}
-
-func newExecutable(id string, config *Config) (Executor, error) {
-	// validate input
 	if id == "" {
 		id = defaultID
 	}
 
-	if len(config.runners) == 0 {
-		return noOpExecutor{}, ErrEmptyRunnerList
-	}
-
 	if config.scheduler == nil && config.cron == "" {
-		return noOpExecutor{}, ErrEmptyScheduler
+		return nil, ErrEmptyScheduler
 	}
 
-	var sched schedule.Scheduler
+	var sched Scheduler
 
 	switch {
 	case config.scheduler != nil:
@@ -275,24 +256,44 @@ func newExecutable(id string, config *Config) (Executor, error) {
 
 		sched, err = schedule.New(opts...)
 		if err != nil {
-			return noOpExecutor{}, err
+			return nil, err
 		}
 	}
 
 	// return the object with the provided runners
-	return &Executable{
+	e := &Executable{
 		id:      id,
 		cron:    sched,
-		runners: config.runners,
+		runners: runners,
 
 		logger:  slog.New(config.handler),
 		metrics: config.metrics,
 		tracer:  config.tracer,
-	}, nil
+	}
+
+	if config.handler == nil {
+		config.handler = log.NoOp()
+	}
+
+	e.logger = slog.New(config.handler)
+
+	if config.metrics == nil {
+		config.metrics = metrics.NoOp()
+	}
+
+	e.metrics = config.metrics
+
+	if config.tracer == nil {
+		config.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
+	}
+
+	e.tracer = config.tracer
+
+	return e, nil
 }
 
 // NoOp returns a no-op Executor.
-func NoOp() Executor {
+func NoOp() noOpExecutor {
 	return noOpExecutor{}
 }
 

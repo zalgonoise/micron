@@ -1,4 +1,4 @@
-//go:build integration
+////go:build integration
 
 package executor_test
 
@@ -46,28 +46,29 @@ func TestNewExecutor(t *testing.T) {
 	is.Empty(t, err)
 
 	for _, testcase := range []struct {
-		name string
-		id   string
-		opts []cfg.Option[*executor.Config]
-		err  error
+		name    string
+		id      string
+		runners []executor.Runner
+		opts    []cfg.Option[*executor.Config]
+		err     error
 	}{
 		{
-			name: "DefaultID",
+			name:    "DefaultID",
+			runners: []executor.Runner{testRunner{}},
 			opts: []cfg.Option[*executor.Config]{
 				executor.WithSchedule(cron),
-				executor.WithRunners(testRunner{}),
 			},
 		},
 		{
-			name: "CustomScheduler",
+			name:    "CustomScheduler",
+			runners: []executor.Runner{testRunner{}},
 			opts: []cfg.Option[*executor.Config]{
 				executor.WithScheduler(sched),
-				executor.WithRunners(testRunner{}),
 			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_, err := executor.New(testcase.id, testcase.opts...)
+			_, err := executor.New(testcase.id, testcase.runners, testcase.opts...)
 			t.Log(err)
 			is.True(t, errors.Is(err, testcase.err))
 		})
@@ -125,10 +126,9 @@ func TestExecutor(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			exec, err := executor.New(testcase.name,
+			exec, err := executor.New(testcase.name, testcase.runners,
 				executor.WithSchedule(cron),
 				executor.WithLocation(time.Local),
-				executor.WithRunners(testcase.runners...),
 				executor.WithMetrics(metrics.NoOp()),
 				executor.WithLogHandler(log.NoOp()),
 				executor.WithLogger(slog.New(log.NoOp())),
