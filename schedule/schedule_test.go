@@ -3,26 +3,23 @@ package schedule
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/zalgonoise/x/is"
-	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule/cronlex"
-	"github.com/zalgonoise/micron/schedule/resolve"
 )
 
 func TestCronSchedule_Next(t *testing.T) {
 	for _, testcase := range []struct {
 		name  string
 		cron  string
-		sched Scheduler
+		sched *CronSchedule
 		input time.Time
 		wants time.Time
 		err   error
@@ -167,274 +164,6 @@ func TestConfig(t *testing.T) {
 
 		is.True(t, errors.Is(err, cronlex.ErrEmptyInput))
 	})
-}
-
-func TestSchedulerWithLogs(t *testing.T) {
-	h := slog.NewJSONHandler(io.Discard, nil)
-	s := &CronSchedule{
-		Loc: time.Local,
-		Schedule: cronlex.Schedule{
-			Sec:      resolve.Everytime{},
-			Min:      resolve.Everytime{},
-			Hour:     resolve.Everytime{},
-			DayMonth: resolve.Everytime{},
-			Month:    resolve.Everytime{},
-			DayWeek:  resolve.Everytime{},
-		},
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name         string
-		s            Scheduler
-		handler      slog.Handler
-		nilHandler   bool
-		nilScheduler bool
-		noOpSched    bool
-	}{
-		{
-			name:         "NilScheduler",
-			nilScheduler: true,
-		},
-		{
-			name:      "NoOpScheduler",
-			s:         noOpScheduler{},
-			noOpSched: true,
-		},
-		{
-			name:       "NilHandler",
-			s:          s,
-			nilHandler: true,
-		},
-		{
-			name:    "WithHandler",
-			s:       s,
-			handler: h,
-		},
-		{
-			name:    "NoOpHandler",
-			s:       s,
-			handler: log.NoOp(),
-		},
-		{
-			name: "ReplaceHandler",
-			s: &CronSchedule{
-				Loc: time.Local,
-				Schedule: cronlex.Schedule{
-					Sec:      resolve.Everytime{},
-					Min:      resolve.Everytime{},
-					Hour:     resolve.Everytime{},
-					DayMonth: resolve.Everytime{},
-					Month:    resolve.Everytime{},
-					DayWeek:  resolve.Everytime{},
-				},
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			handler: h,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronScheduler := AddLogs(testcase.s, testcase.handler)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			_ = cronScheduler.Next(ctx, time.Time{})
-
-			switch sched := cronScheduler.(type) {
-			case noOpScheduler:
-				is.True(t, testcase.nilScheduler || testcase.noOpSched)
-			case *CronSchedule:
-				switch {
-				case testcase.handler == nil:
-					is.True(t, testcase.nilHandler)
-				default:
-					is.Equal(t, testcase.handler, sched.logger.Handler())
-				}
-			}
-		})
-	}
-}
-
-func TestSchedulerWithMetrics(t *testing.T) {
-	m := metrics.NoOp()
-	s := &CronSchedule{
-		Loc: time.Local,
-		Schedule: cronlex.Schedule{
-			Sec:      resolve.Everytime{},
-			Min:      resolve.Everytime{},
-			Hour:     resolve.Everytime{},
-			DayMonth: resolve.Everytime{},
-			Month:    resolve.Everytime{},
-			DayWeek:  resolve.Everytime{},
-		},
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name         string
-		s            Scheduler
-		m            Metrics
-		nilMetrics   bool
-		nilScheduler bool
-		noOpSched    bool
-	}{
-		{
-			name:         "NilScheduler",
-			nilScheduler: true,
-		},
-		{
-			name:      "NoOpScheduler",
-			s:         noOpScheduler{},
-			noOpSched: true,
-		},
-		{
-			name:       "NilMetrics",
-			s:          s,
-			nilMetrics: true,
-		},
-		{
-			name: "WithMetrics",
-			s:    s,
-			m:    m,
-		},
-		{
-			name: "NoOpMetrics",
-			s:    s,
-			m:    metrics.NoOp(),
-		},
-		{
-			name: "ReplaceMetrics",
-			s: &CronSchedule{
-				Loc: time.Local,
-				Schedule: cronlex.Schedule{
-					Sec:      resolve.Everytime{},
-					Min:      resolve.Everytime{},
-					Hour:     resolve.Everytime{},
-					DayMonth: resolve.Everytime{},
-					Month:    resolve.Everytime{},
-					DayWeek:  resolve.Everytime{},
-				},
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			m: m,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronScheduler := AddMetrics(testcase.s, testcase.m)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			_ = cronScheduler.Next(ctx, time.Time{})
-
-			switch sched := cronScheduler.(type) {
-			case noOpScheduler:
-				is.True(t, testcase.nilScheduler || testcase.noOpSched)
-			case *CronSchedule:
-				switch {
-				case testcase.m == nil:
-					is.True(t, testcase.nilMetrics)
-				default:
-					is.Equal(t, testcase.m, sched.metrics)
-				}
-			}
-		})
-	}
-}
-
-func TestSchedulerWithTrace(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	s := &CronSchedule{
-		Loc: time.Local,
-		Schedule: cronlex.Schedule{
-			Sec:      resolve.Everytime{},
-			Min:      resolve.Everytime{},
-			Hour:     resolve.Everytime{},
-			DayMonth: resolve.Everytime{},
-			Month:    resolve.Everytime{},
-			DayWeek:  resolve.Everytime{},
-		},
-		logger:  slog.New(log.NoOp()),
-		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
-
-	for _, testcase := range []struct {
-		name        string
-		s           Scheduler
-		tracer      trace.Tracer
-		nilTracer   bool
-		nilSchedule bool
-		noOpSched   bool
-	}{
-		{
-			name:        "NilScheduler",
-			nilSchedule: true,
-		},
-		{
-			name:      "NoOpScheduler",
-			s:         noOpScheduler{},
-			noOpSched: true,
-		},
-		{
-			name:      "NilTracer",
-			s:         s,
-			nilTracer: true,
-		},
-		{
-			name:   "WithTracer",
-			s:      s,
-			tracer: tracer,
-		},
-		{
-			name: "ReplaceTracer",
-			s: &CronSchedule{
-				Loc: time.Local,
-				Schedule: cronlex.Schedule{
-					Sec:      resolve.Everytime{},
-					Min:      resolve.Everytime{},
-					Hour:     resolve.Everytime{},
-					DayMonth: resolve.Everytime{},
-					Month:    resolve.Everytime{},
-					DayWeek:  resolve.Everytime{},
-				},
-				logger:  slog.New(log.NoOp()),
-				metrics: metrics.NoOp(),
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-			},
-			tracer: tracer,
-		},
-	} {
-		t.Run(testcase.name, func(t *testing.T) {
-			cronScheduler := AddTraces(testcase.s, testcase.tracer)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			_ = cronScheduler.Next(ctx, time.Time{})
-
-			switch sched := cronScheduler.(type) {
-			case noOpScheduler:
-				is.True(t, testcase.nilSchedule || testcase.noOpSched)
-			case *CronSchedule:
-				switch {
-				case testcase.tracer == nil:
-					is.True(t, testcase.nilTracer)
-				default:
-					is.Equal(t, testcase.tracer, sched.tracer)
-				}
-			}
-		})
-	}
 }
 
 func TestNoOp(t *testing.T) {

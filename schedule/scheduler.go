@@ -8,7 +8,10 @@ import (
 	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule/cronlex"
 	"github.com/zalgonoise/micron/schedule/resolve"
 )
@@ -17,21 +20,6 @@ const maxSec = 59
 
 //nolint:gochecknoglobals // immutable instance of resolve.FixedSchedule for a fixed seconds schedule
 var fixedSeconds = resolve.FixedSchedule{Max: maxSec, At: 0}
-
-// Scheduler describes the capabilities of a cron job scheduler. Its sole responsibility is to provide
-// the timestamp for the next job's execution, after calculating its frequency from its configuration.
-//
-// Scheduler exposes one method, Next, that takes in a context.Context and a time.Time. It is implied that the
-// input time is the time.Now value, however it is open to any input that the caller desires to pass to it. The returned
-// time.Time value must always be the following occurrence according to the schedule, in the context of the input time.
-//
-// Implementations of Next should take into consideration the cron specification; however the interface allows a custom
-// approach to the scheduler, especially if added functionality is necessary (e.g. frequency overriding schedulers,
-// dynamic frequencies, and pipeline-approaches where the frequency is evaluated after a certain check).
-type Scheduler interface {
-	// Next calculates and returns the following scheduled time, from the input time.Time.
-	Next(ctx context.Context, now time.Time) time.Time
-}
 
 // Metrics describes the actions that register Scheduler-related metrics.
 type Metrics interface {
@@ -119,39 +107,50 @@ func (s *CronSchedule) Next(ctx context.Context, t time.Time) time.Time {
 // Creating a Scheduler requires the caller to provide at least a cron string, using the WithSchedule option.
 //
 // If a time.Location is not specified with the WithLocation option, then time.Local is used.
-func New(options ...cfg.Option[Config]) (Scheduler, error) {
+func New(options ...cfg.Option[Config]) (*CronSchedule, error) {
 	config := cfg.Set(defaultConfig(), options...)
 
-	cron, err := newScheduler(config)
-	if err != nil {
-		return noOpScheduler{}, err
-	}
-
-	return cron, nil
-}
-
-func newScheduler(config Config) (Scheduler, error) {
 	// parse cron string
 	sched, err := cronlex.Parse(config.cron)
 	if err != nil {
-		return noOpScheduler{}, err
+		return nil, err
 	}
 
 	if config.loc == nil {
 		config.loc = time.Local
 	}
 
-	return &CronSchedule{
+	c := &CronSchedule{
 		Loc:      config.loc,
 		Schedule: sched,
 
 		logger:  slog.New(config.handler),
 		metrics: config.metrics,
 		tracer:  config.tracer,
-	}, nil
+	}
+
+	if config.handler == nil {
+		config.handler = log.NoOp()
+	}
+
+	c.logger = slog.New(config.handler)
+
+	if config.metrics == nil {
+		config.metrics = metrics.NoOp()
+	}
+
+	c.metrics = config.metrics
+
+	if config.tracer == nil {
+		config.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
+	}
+
+	c.tracer = config.tracer
+
+	return c, nil
 }
 
-func NoOp() Scheduler {
+func NoOp() noOpScheduler {
 	return noOpScheduler{}
 }
 
