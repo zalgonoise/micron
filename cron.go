@@ -123,7 +123,7 @@ func (r runtime) Run(ctx context.Context) {
 	}
 }
 
-// Err returns a receive-only errors channel, allowing the caller to consumer any errors raised during the execution
+// Err returns a receive-only error channel, allowing the caller to consumer any errors raised during the execution
 // of cron jobs.
 //
 // It is the responsibility of the caller to consume these errors appropriately, within the logic of their app.
