@@ -131,7 +131,7 @@ func (r runtime) Err() <-chan error {
 	return r.err
 }
 
-// New creates a Runtime with the input cfg.Option(s), also returning an error if raised.
+// New creates a Runtime with the input cfg.Option, also returning an error if raised.
 //
 // The minimum requirements to create a Runtime is to supply either a selector.Selector through the WithSelector option,
 // or a (set of) executor.Executor(s) through the WithJob option. The caller is free to select any they desire,
