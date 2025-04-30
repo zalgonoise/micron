@@ -3,6 +3,7 @@ package selector
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
@@ -48,7 +49,7 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	case 1:
 		err = s.exec[0].Exec(ctx)
 	default:
-		err = executor.Multi(ctx, s.next(ctx)...)
+		err = s.next(ctx)[0].Exec(ctx)
 	}
 
 	if err != nil {
@@ -66,35 +67,21 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 }
 
 func (s *BlockingSelector) next(ctx context.Context) []executor.Executor {
-	var (
-		next time.Duration
-		exec = make([]executor.Executor, 0, len(s.exec))
-		now  = time.Now()
-	)
+	slices.SortFunc(s.exec, func(a, b executor.Executor) int {
+		return a.Next(ctx).Compare(b.Next(ctx))
+	})
 
-	for i := range s.exec {
-		t := s.exec[i].Next(ctx).Sub(now)
+	if s.logger.Enabled(ctx, slog.LevelDebug) {
+		times := make(map[string]string, len(s.exec))
 
-		switch {
-		case i == 0:
-			next = t
-
-			exec = append(exec, s.exec[i])
-
-			continue
-		case t == next:
-			exec = append(exec, s.exec[i])
-
-			continue
-		case t < next:
-			next = t
-			exec = make([]executor.Executor, 0, len(s.exec))
-
-			exec = append(exec, s.exec[i])
-
-			continue
+		for i := range s.exec {
+			times[s.exec[i].ID()] = s.exec[i].Next(ctx).Format(time.RFC3339)
 		}
+
+		s.logger.DebugContext(ctx, "selecting the next task",
+			slog.Any("times", times),
+		)
 	}
 
-	return exec
+	return s.exec
 }
