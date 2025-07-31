@@ -2,14 +2,16 @@ package micron
 
 import (
 	"context"
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
-	"go.opentelemetry.io/otel/trace/noop"
 	"log/slog"
+
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
-	"go.opentelemetry.io/otel/trace"
+
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
 )
 
 const (
