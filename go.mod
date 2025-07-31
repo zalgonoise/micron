@@ -1,4 +1,4 @@
-module github.com/zalgonoise/micron
+module github.com/zalgonoise/micron/v3
 
 go 1.24
 
