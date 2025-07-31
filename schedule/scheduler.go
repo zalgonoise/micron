@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"github.com/zalgonoise/x/errs"
 	"log/slog"
 	"time"
 
@@ -16,6 +17,14 @@ import (
 	"github.com/zalgonoise/micron/schedule/resolve"
 )
 
+const (
+	domainErr   = errs.Domain("micron")
+	ErrEmpty    = errs.Kind("empty")
+	ErrSchedule = errs.Entity("cron schedule")
+)
+
+var ErrEmptySchedule = errs.WithDomain(domainErr, ErrEmpty, ErrSchedule)
+
 const maxSec = 59
 
 //nolint:gochecknoglobals // immutable instance of resolve.FixedSchedule for a fixed seconds schedule
@@ -24,7 +33,7 @@ var fixedSeconds = resolve.FixedSchedule{Max: maxSec, At: 0}
 // Metrics describes the actions that register Scheduler-related metrics.
 type Metrics interface {
 	// IncSchedulerNextCalls increases the count of Next calls, by the Scheduler.
-	IncSchedulerNextCalls()
+	IncSchedulerNextCalls(ctx context.Context)
 }
 
 // CronSchedule represents a basic implementation of a Scheduler, following the cron schedule specification.
@@ -34,7 +43,7 @@ type CronSchedule struct {
 	// Loc will localize the times to a certain region or geolocation.
 	Loc *time.Location
 	// Schedule describes the schedule frequency definition, with different cron schedule elements.
-	Schedule cronlex.Schedule
+	Schedule *cronlex.Schedule
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -46,7 +55,7 @@ func (s *CronSchedule) Next(ctx context.Context, t time.Time) time.Time {
 	ctx, span := s.tracer.Start(ctx, "Scheduler.Next")
 	defer span.End()
 
-	s.metrics.IncSchedulerNextCalls()
+	s.metrics.IncSchedulerNextCalls(ctx)
 
 	year, month, day := t.Date()
 	hour := t.Hour()
@@ -107,47 +116,30 @@ func (s *CronSchedule) Next(ctx context.Context, t time.Time) time.Time {
 // Creating a Scheduler requires the caller to provide at least a cron string, using the WithSchedule option.
 //
 // If a time.Location is not specified with the WithLocation option, then time.Local is used.
-func New(options ...cfg.Option[Config]) (*CronSchedule, error) {
-	config := cfg.Set(defaultConfig(), options...)
+func New(options ...cfg.Option[*CronSchedule]) (*CronSchedule, error) {
+	s := cfg.Set(defaultSchedule(), options...)
 
-	// parse cron string
-	sched, err := cronlex.Parse(config.cron)
-	if err != nil {
-		return nil, err
+	if s.Schedule == nil {
+		return nil, ErrEmptySchedule
 	}
 
-	if config.loc == nil {
-		config.loc = time.Local
+	if s.Loc == nil {
+		s.Loc = time.Local
 	}
 
-	c := &CronSchedule{
-		Loc:      config.loc,
-		Schedule: sched,
-
-		logger:  slog.New(config.handler),
-		metrics: config.metrics,
-		tracer:  config.tracer,
+	if s.logger == nil {
+		s.logger = slog.New(log.NoOp())
 	}
 
-	if config.handler == nil {
-		config.handler = log.NoOp()
+	if s.metrics == nil {
+		s.metrics = metrics.NoOp()
 	}
 
-	c.logger = slog.New(config.handler)
-
-	if config.metrics == nil {
-		config.metrics = metrics.NoOp()
+	if s.tracer == nil {
+		s.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
 	}
 
-	c.metrics = config.metrics
-
-	if config.tracer == nil {
-		config.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
-	}
-
-	c.tracer = config.tracer
-
-	return c, nil
+	return s, nil
 }
 
 func NoOp() noOpScheduler {
