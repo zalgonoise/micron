@@ -66,9 +66,9 @@ type Schedule struct {
 //
 // Before parsing the string, this function validates that the cron string does not contain any illegal characters,
 // before actually scanning and processing it.
-func Parse(cron string) (Schedule, error) {
+func Parse(cron string) (*Schedule, error) {
 	if err := validateCharacters(cron); err != nil {
-		return Schedule{}, err
+		return nil, err
 	}
 
 	return parse.Run([]byte(cron), StateFunc, ParseFunc, ProcessFunc)
@@ -79,13 +79,13 @@ func Parse(cron string) (Schedule, error) {
 //
 // This sequence will validate the nodes in the input parse.Tree, returning an error if raised. Then, depending on the
 // configured top-level nodes, it will process the tree in the correct, supported way to derive a Schedule out of it.
-func ProcessFunc(t *parse.Tree[Token, byte]) (Schedule, error) {
+func ProcessFunc(t *parse.Tree[Token, byte]) (*Schedule, error) {
 	if err := Validate(t); err != nil {
-		return Schedule{}, err
+		return nil, err
 	}
 
 	var (
-		s     Schedule
+		s     *Schedule
 		nodes = t.List()
 	)
 
@@ -93,7 +93,7 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (Schedule, error) {
 	case override:
 		return buildException(nodes[0]), nil
 	case noSeconds:
-		s = Schedule{
+		s = &Schedule{
 			Sec: resolve.FixedSchedule{
 				Max: maxSec,
 				At:  0,
@@ -105,7 +105,7 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (Schedule, error) {
 			DayWeek:  buildWeekdays(nodes[4]),
 		}
 	case withSeconds:
-		s = Schedule{
+		s = &Schedule{
 			Sec:      buildSeconds(nodes[0]),
 			Min:      buildMinutes(nodes[1]),
 			Hour:     buildHours(nodes[2]),
@@ -114,6 +114,11 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (Schedule, error) {
 			DayWeek:  buildWeekdays(nodes[5]),
 		}
 	}
+
+	if s == nil {
+		return nil, ErrInvalid
+	}
+
 	// convert sundays as 7 into a 0
 	if r, ok := s.DayWeek.(resolve.StepSchedule); ok {
 		for i := range r.Steps {
@@ -183,8 +188,8 @@ func buildWeekdays(node *parse.Node[Token, byte]) Resolver {
 	}
 }
 
-func defaultSchedule() Schedule {
-	return Schedule{
+func defaultSchedule() *Schedule {
+	return &Schedule{
 		Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
 		Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 		Hour:     resolve.Everytime{},
@@ -194,7 +199,7 @@ func defaultSchedule() Schedule {
 	}
 }
 
-func buildException(node *parse.Node[Token, byte]) Schedule {
+func buildException(node *parse.Node[Token, byte]) *Schedule {
 	if node.Type != TokenAt {
 		return defaultSchedule()
 	}
@@ -205,7 +210,7 @@ func buildException(node *parse.Node[Token, byte]) Schedule {
 	case reboot:
 		return defaultSchedule()
 	case daily:
-		return Schedule{
+		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
 			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
@@ -214,7 +219,7 @@ func buildException(node *parse.Node[Token, byte]) Schedule {
 			DayWeek:  resolve.Everytime{},
 		}
 	case weekly:
-		return Schedule{
+		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
 			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
@@ -226,7 +231,7 @@ func buildException(node *parse.Node[Token, byte]) Schedule {
 			},
 		}
 	case monthly:
-		return Schedule{
+		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
 			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
@@ -235,7 +240,7 @@ func buildException(node *parse.Node[Token, byte]) Schedule {
 			DayWeek:  resolve.Everytime{},
 		}
 	case yearly, annually:
-		return Schedule{
+		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
 			Min:      resolve.FixedSchedule{Max: maxMin, At: 0},
 			Hour:     resolve.FixedSchedule{Max: maxHour, At: 0},
