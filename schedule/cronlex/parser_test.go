@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zalgonoise/x/is"
 
-	"github.com/zalgonoise/micron/schedule/resolve"
+	"github.com/zalgonoise/micron/v3/schedule/resolve"
 )
 
 func TestParser(t *testing.T) {

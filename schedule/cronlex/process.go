@@ -7,7 +7,7 @@ import (
 
 	"github.com/zalgonoise/parse"
 
-	"github.com/zalgonoise/micron/schedule/resolve"
+	"github.com/zalgonoise/micron/v3/schedule/resolve"
 )
 
 const (
