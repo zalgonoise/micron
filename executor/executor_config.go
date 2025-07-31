@@ -13,21 +13,11 @@ import (
 	"github.com/zalgonoise/micron/schedule"
 )
 
-type Config struct {
-	scheduler Scheduler
-	cron      string
-	loc       *time.Location
-
-	handler slog.Handler
-	metrics Metrics
-	tracer  trace.Tracer
-}
-
-func defaultConfig() *Config {
-	return &Config{
-		handler: log.NoOp(),
+func defaultExecutable() *Executable {
+	return &Executable{
+		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("executor's no-op tracer"),
+		tracer:  noop.NewTracerProvider().Tracer("micron.executor"),
 	}
 }
 
@@ -36,15 +26,15 @@ func defaultConfig() *Config {
 // This call returns a cfg.NoOp cfg.Option if the input schedule.Scheduler is either nil or a no-op.
 //
 // Using this option does not require passing WithSchedule nor WithLocation options.
-func WithScheduler(sched Scheduler) cfg.Option[*Config] {
+func WithScheduler(sched Scheduler) cfg.Option[*Executable] {
 	if sched == nil || sched == schedule.NoOp() {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.scheduler = sched
+	return cfg.Register(func(e *Executable) *Executable {
+		e.cron = sched
 
-		return config
+		return e
 	})
 }
 
@@ -53,82 +43,77 @@ func WithScheduler(sched Scheduler) cfg.Option[*Config] {
 // This call returns a cfg.NoOp cfg.Option if the cron string is empty.
 //
 // This option can be followed by a WithLocation option.
-func WithSchedule(cron string) cfg.Option[*Config] {
+func WithSchedule(cron string, loc *time.Location) cfg.Option[*Executable] {
 	if cron == "" {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.cron = cron
-
-		return config
-	})
-}
-
-// WithLocation configures the Executor's schedule.Scheduler with the input time.Location.
-//
-// This call returns a cfg.NoOp cfg.Option if the input time.Location is nil.
-//
-// Using this option implies using the WithSchedule option, as it means the caller is creating a
-// schedule from a cron string, instead of passing a schedule.Scheduler with the WithScheduler option.
-func WithLocation(loc *time.Location) cfg.Option[*Config] {
 	if loc == nil {
-		return cfg.NoOp[*Config]{}
+		loc = time.Local
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.loc = loc
+	scheduler, err := schedule.New(
+		schedule.WithSchedule(cron),
+		schedule.WithLocation(loc),
+	)
 
-		return config
+	if err != nil {
+		return cfg.NoOp[*Executable]{}
+	}
+
+	return cfg.Register(func(e *Executable) *Executable {
+		e.cron = scheduler
+
+		return e
 	})
 }
 
 // WithMetrics decorates the Executor with the input metrics registry.
-func WithMetrics(m Metrics) cfg.Option[*Config] {
+func WithMetrics(m Metrics) cfg.Option[*Executable] {
 	if m == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.metrics = m
+	return cfg.Register(func(e *Executable) *Executable {
+		e.metrics = m
 
-		return config
+		return e
 	})
 }
 
 // WithLogger decorates the Executor with the input logger.
-func WithLogger(logger *slog.Logger) cfg.Option[*Config] {
+func WithLogger(logger *slog.Logger) cfg.Option[*Executable] {
 	if logger == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.handler = logger.Handler()
+	return cfg.Register(func(e *Executable) *Executable {
+		e.logger = logger
 
-		return config
+		return e
 	})
 }
 
 // WithLogHandler decorates the Executor with logging using the input log handler.
-func WithLogHandler(handler slog.Handler) cfg.Option[*Config] {
+func WithLogHandler(handler slog.Handler) cfg.Option[*Executable] {
 	if handler == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.handler = handler
+	return cfg.Register(func(e *Executable) *Executable {
+		e.logger = slog.New(handler)
 
-		return config
+		return e
 	})
 }
 
 // WithTrace decorates the Executor with the input trace.Tracer.
-func WithTrace(tracer trace.Tracer) cfg.Option[*Config] {
+func WithTrace(tracer trace.Tracer) cfg.Option[*Executable] {
 	if tracer == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Executable]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
+	return cfg.Register(func(config *Executable) *Executable {
 		config.tracer = tracer
 
 		return config

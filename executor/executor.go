@@ -15,7 +15,6 @@ import (
 
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/schedule"
 )
 
 const (
@@ -92,13 +91,13 @@ func (r Runnable) Run(ctx context.Context) error {
 // Metrics describes the actions that register Executor-related metrics.
 type Metrics interface {
 	// IncExecutorExecCalls increases the count of Exec calls, by the Executor.
-	IncExecutorExecCalls(id string)
+	IncExecutorExecCalls(ctx context.Context, id string)
 	// IncExecutorExecErrors increases the count of Exec call errors, by the Executor.
-	IncExecutorExecErrors(id string)
+	IncExecutorExecErrors(ctx context.Context, id string)
 	// ObserveExecLatency registers the duration of an Exec call, by the Executor.
 	ObserveExecLatency(ctx context.Context, id string, dur time.Duration)
 	// IncExecutorNextCalls increases the count of Next calls, by the Executor.
-	IncExecutorNextCalls(id string)
+	IncExecutorNextCalls(ctx context.Context, id string)
 }
 
 // Executable is an implementation of the Executor interface. It uses a schedule.Scheduler to mark the next job's
@@ -118,7 +117,7 @@ func (e *Executable) Next(ctx context.Context) time.Time {
 	ctx, span := e.tracer.Start(ctx, "Executor.Next")
 	defer span.End()
 
-	e.metrics.IncExecutorNextCalls(e.id)
+	e.metrics.IncExecutorNextCalls(ctx, e.id)
 
 	next := e.cron.Next(ctx, time.Now())
 
@@ -145,7 +144,7 @@ func (e *Executable) Exec(ctx context.Context) error {
 	defer span.End()
 
 	span.SetAttributes(attribute.String("id", e.id))
-	e.metrics.IncExecutorExecCalls(e.id)
+	e.metrics.IncExecutorExecCalls(ctx, e.id)
 	e.logger.InfoContext(ctx, "executing task", slog.String("id", e.id))
 
 	execCtx, cancel := context.WithCancel(ctx)
@@ -167,7 +166,7 @@ func (e *Executable) Exec(ctx context.Context) error {
 		case <-ctx.Done():
 			err := ctx.Err()
 
-			e.metrics.IncExecutorExecErrors(e.id)
+			e.metrics.IncExecutorExecErrors(ctx, e.id)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			e.logger.WarnContext(ctx, "task cancelled",
@@ -196,7 +195,7 @@ func (e *Executable) Exec(ctx context.Context) error {
 
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
-				e.metrics.IncExecutorExecErrors(e.id)
+				e.metrics.IncExecutorExecErrors(ctx, e.id)
 				e.logger.ErrorContext(ctx, "task execution error(s)",
 					slog.String("id", e.id),
 					slog.Int("num_errors", len(runnerErrs)),
@@ -223,71 +222,40 @@ func (e *Executable) ID() string {
 // WithScheduler option -- alternatively, callers can simply pass a cron string directly using the WithSchedule option.
 //
 // If an ID is not supplied, then the default ID of `micron.executor` is set.
-func New(id string, runners []Runner, options ...cfg.Option[*Config]) (*Executable, error) {
-	config := cfg.Set(defaultConfig(), options...)
+func New(id string, runners []Runner, options ...cfg.Option[*Executable]) (*Executable, error) {
+	e := cfg.Set(defaultExecutable(), options...)
+
+	e.runners = runners
+
+	return validate(id, e)
+}
+
+func validate(id string, e *Executable) (*Executable, error) {
+	if len(e.runners) == 0 {
+		return nil, ErrRunnerList
+	}
+
+	if e.cron == nil {
+		return nil, ErrEmptyScheduler
+	}
 
 	if id == "" {
 		id = defaultID
 	}
 
-	if config.scheduler == nil && config.cron == "" {
-		return nil, ErrEmptyScheduler
+	e.id = id
+
+	if e.logger == nil {
+		e.logger = slog.New(log.NoOp())
 	}
 
-	var sched Scheduler
-
-	switch {
-	case config.scheduler != nil:
-		// scheduler is provided, ignore cron string and location
-		sched = config.scheduler
-	default:
-		// create a new scheduler from config
-		opts := make([]cfg.Option[schedule.Config], 0, cronAndLocAlloc)
-
-		if config.cron != "" {
-			opts = append(opts, schedule.WithSchedule(config.cron))
-		}
-
-		if config.loc != nil {
-			opts = append(opts, schedule.WithLocation(config.loc))
-		}
-
-		var err error
-
-		sched, err = schedule.New(opts...)
-		if err != nil {
-			return nil, err
-		}
+	if e.metrics == nil {
+		e.metrics = metrics.NoOp()
 	}
 
-	// return the object with the provided runners
-	e := &Executable{
-		id:      id,
-		cron:    sched,
-		runners: runners,
-
-		logger:  slog.New(config.handler),
-		metrics: config.metrics,
-		tracer:  config.tracer,
+	if e.tracer == nil {
+		e.tracer = noop.NewTracerProvider().Tracer("micron.executor")
 	}
-
-	if config.handler == nil {
-		config.handler = log.NoOp()
-	}
-
-	e.logger = slog.New(config.handler)
-
-	if config.metrics == nil {
-		config.metrics = metrics.NoOp()
-	}
-
-	e.metrics = config.metrics
-
-	if config.tracer == nil {
-		config.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
-	}
-
-	e.tracer = config.tracer
 
 	return e, nil
 }

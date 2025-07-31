@@ -25,99 +25,87 @@ func TestConfig(t *testing.T) {
 
 	for _, testcase := range []struct {
 		name string
-		opts []cfg.Option[*Config]
+		opts []cfg.Option[*Executable]
 	}{
 		{
 			name: "WithRunners/EmptyConfig",
-			opts: []cfg.Option[*Config]{},
+			opts: []cfg.Option[*Executable]{},
 		},
 		{
 			name: "WithScheduler/NoScheduler",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithScheduler(nil),
 			},
 		},
 		{
 			name: "WithScheduler/OneScheduler",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithScheduler(testScheduler{}),
 			},
 		},
 		{
 			name: "WithSchedule/EmptyString",
-			opts: []cfg.Option[*Config]{
-				WithSchedule(""),
+			opts: []cfg.Option[*Executable]{
+				WithSchedule("", nil),
 			},
 		},
 		{
 			name: "WithSchedule/WithCronString",
-			opts: []cfg.Option[*Config]{
-				WithSchedule(cron),
-			},
-		},
-		{
-			name: "WithLocation/NilLocation",
-			opts: []cfg.Option[*Config]{
-				WithLocation(nil),
-			},
-		},
-		{
-			name: "WithLocation/Local",
-			opts: []cfg.Option[*Config]{
-				WithLocation(time.Local),
+			opts: []cfg.Option[*Executable]{
+				WithSchedule(cron, time.Local),
 			},
 		},
 		{
 			name: "WithMetrics/NilMetrics",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithMetrics(nil),
 			},
 		},
 		{
 			name: "WithMetrics/NoOp",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithMetrics(metrics.NoOp()),
 			},
 		},
 		{
 			name: "WithLogger/NilLogger",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithLogger(nil),
 			},
 		},
 		{
 			name: "WithLogger/NoOp",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithLogger(slog.New(log.NoOp())),
 			},
 		},
 		{
 			name: "WithLogHandler/NilHandler",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithLogHandler(nil),
 			},
 		},
 		{
 			name: "WithLogHandler/NoOp",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithLogHandler(log.NoOp()),
 			},
 		},
 		{
 			name: "WithTrace/NilTracer",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithTrace(nil),
 			},
 		},
 		{
 			name: "WithTrace/NoOp",
-			opts: []cfg.Option[*Config]{
+			opts: []cfg.Option[*Executable]{
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
 			},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_ = cfg.Set(new(Config), testcase.opts...)
+			_ = cfg.Set(new(Executable), testcase.opts...)
 		})
 	}
 }
@@ -139,7 +127,7 @@ func TestNew(t *testing.T) {
 	for _, testcase := range []struct {
 		name    string
 		runners []Runner
-		conf    []cfg.Option[*Config]
+		conf    []cfg.Option[*Executable]
 		err     error
 	}{
 		{
@@ -149,14 +137,14 @@ func TestNew(t *testing.T) {
 		{
 			name:    "NoSchedulerOrCronString",
 			runners: []Runner{r},
-			conf:    []cfg.Option[*Config]{},
+			conf:    []cfg.Option[*Executable]{},
 			err:     ErrEmptyScheduler,
 		},
 		{
 			name:    "InvalidCronString",
 			runners: []Runner{r},
-			conf: []cfg.Option[*Config]{
-				WithSchedule(cron),
+			conf: []cfg.Option[*Executable]{
+				WithSchedule(cron, time.Local),
 			},
 			err: cronlex.ErrInvalidFrequency,
 		},

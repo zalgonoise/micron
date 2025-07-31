@@ -49,20 +49,20 @@ func TestNewExecutor(t *testing.T) {
 		name    string
 		id      string
 		runners []executor.Runner
-		opts    []cfg.Option[*executor.Config]
+		opts    []cfg.Option[*executor.Executable]
 		err     error
 	}{
 		{
 			name:    "DefaultID",
 			runners: []executor.Runner{testRunner{}},
-			opts: []cfg.Option[*executor.Config]{
-				executor.WithSchedule(cron),
+			opts: []cfg.Option[*executor.Executable]{
+				executor.WithSchedule(cron, time.Local),
 			},
 		},
 		{
 			name:    "CustomScheduler",
 			runners: []executor.Runner{testRunner{}},
-			opts: []cfg.Option[*executor.Config]{
+			opts: []cfg.Option[*executor.Executable]{
 				executor.WithScheduler(sched),
 			},
 		},
@@ -127,8 +127,7 @@ func TestExecutor(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			exec, err := executor.New(testcase.name, testcase.runners,
-				executor.WithSchedule(cron),
-				executor.WithLocation(time.Local),
+				executor.WithSchedule(cron, time.Local),
 				executor.WithMetrics(metrics.NoOp()),
 				executor.WithLogHandler(log.NoOp()),
 				executor.WithLogger(slog.New(log.NoOp())),
