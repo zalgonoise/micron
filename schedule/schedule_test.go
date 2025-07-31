@@ -125,7 +125,6 @@ func TestCronSchedule_Next(t *testing.T) {
 
 			sched, err := New(
 				WithSchedule(schedule),
-				WithLocation(time.UTC),
 				WithLogHandler(log.NoOp()),
 				WithMetrics(metrics.NoOp()),
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
@@ -152,7 +151,6 @@ func TestConfig(t *testing.T) {
 
 		_, err = New(
 			WithSchedule(schedule),
-			WithLocation(time.UTC),
 			WithLogger(slog.New(log.NoOp())),
 		)
 

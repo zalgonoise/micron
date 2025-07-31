@@ -34,6 +34,7 @@ var fixedSeconds = resolve.FixedSchedule{Max: maxSec, At: 0}
 type Metrics interface {
 	// IncSchedulerNextCalls increases the count of Next calls, by the Scheduler.
 	IncSchedulerNextCalls(ctx context.Context)
+	IncSelectorSelectCalls(context.Context)
 }
 
 // CronSchedule represents a basic implementation of a Scheduler, following the cron schedule specification.
