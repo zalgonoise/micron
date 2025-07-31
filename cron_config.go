@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/zalgonoise/micron/executor"
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/selector"
@@ -15,27 +14,15 @@ import (
 
 const (
 	minBufferSize     = 64
-	minAlloc          = 64
 	defaultBufferSize = 1024
 )
 
-type Config struct {
-	errBufferSize int
-
-	sel   Selector
-	execs []executor.Executor
-
-	handler slog.Handler
-	metrics Metrics
-	tracer  trace.Tracer
-}
-
-func defaultConfig() *Config {
-	return &Config{
-		errBufferSize: minBufferSize,
-		handler:       log.NoOp(),
-		metrics:       metrics.NoOp(),
-		tracer:        noop.NewTracerProvider().Tracer("no-op tracer"),
+func defaultRuntime() *Runtime {
+	return &Runtime{
+		err:     make(chan error, minBufferSize),
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("micron"),
 	}
 }
 
@@ -43,117 +30,80 @@ func defaultConfig() *Config {
 //
 // This call returns a cfg.NoOp cfg.Option if the input selector.Selector is nil, or if it is a
 // selector.NoOp type.
-func WithSelector(sel Selector) cfg.Option[*Config] {
+func WithSelector(sel Selector) cfg.Option[*Runtime] {
 	if sel == nil || sel == selector.NoOp() {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Runtime]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.sel = sel
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.sel = sel
 
-		return config
-	})
-}
-
-// WithJob adds a new executor.Executor to the Runtime configuration from the input ID, cron string and
-// set of executor.Runner.
-//
-// This call returns a cfg.NoOp cfg.Option if no executor.Runner is provided, or if creating the executor.Executor
-// fails (e.g. due to an invalid cron string).
-//
-// The gathered executor.Executor are then injected into a new selector.Selector that the Runtime will use.
-//
-// Note: this call is only valid if when creating a new Runtime via the New function, no WithSelector option is
-// supplied; only WithJob. A call to New supports multiple WithJob cfg.Option.
-func WithJob(id, cron string, runners ...executor.Runner) cfg.Option[*Config] {
-	if len(runners) == 0 {
-		return cfg.NoOp[*Config]{}
-	}
-
-	if id == "" {
-		id = cron
-	}
-
-	exec, err := executor.New(id, runners,
-		executor.WithSchedule(cron),
-	)
-	if err != nil {
-		return cfg.NoOp[*Config]{}
-	}
-
-	return cfg.Register(func(config *Config) *Config {
-		if config.execs == nil {
-			config.execs = make([]executor.Executor, 0, minAlloc)
-		}
-
-		config.execs = append(config.execs, exec)
-
-		return config
+		return r
 	})
 }
 
 // WithErrorBufferSize defines the capacity of the error channel that the Runtime exposes in
 // its Runtime.Err method.
-func WithErrorBufferSize(size int) cfg.Option[*Config] {
+func WithErrorBufferSize(size int) cfg.Option[*Runtime] {
 	if size < 0 {
 		size = defaultBufferSize
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.errBufferSize = size
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.err = make(chan error, size)
 
-		return config
+		return r
 	})
 }
 
 // WithMetrics decorates the Runtime with the input metrics registry.
-func WithMetrics(m Metrics) cfg.Option[*Config] {
+func WithMetrics(m Metrics) cfg.Option[*Runtime] {
 	if m == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Runtime]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.metrics = m
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.metrics = m
 
-		return config
+		return r
 	})
 }
 
-// WithLogger decorates the Runtime with the input logger.
-func WithLogger(logger *slog.Logger) cfg.Option[*Config] {
+// WithLogger configures the Runtime with the input logger.
+func WithLogger(logger *slog.Logger) cfg.Option[*Runtime] {
 	if logger == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Runtime]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.handler = logger.Handler()
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.logger = logger
 
-		return config
+		return r
 	})
 }
 
-// WithLogHandler decorates the Runtime with logging using the input log handler.
-func WithLogHandler(handler slog.Handler) cfg.Option[*Config] {
+// WithLogHandler configures the Runtime's logger using the input log handler.
+func WithLogHandler(handler slog.Handler) cfg.Option[*Runtime] {
 	if handler == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Runtime]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.handler = handler
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.logger = slog.New(handler)
 
-		return config
+		return r
 	})
 }
 
-// WithTrace decorates the Runtime with the input trace.Tracer.
-func WithTrace(tracer trace.Tracer) cfg.Option[*Config] {
+// WithTrace configures the Runtime with the input trace.Tracer.
+func WithTrace(tracer trace.Tracer) cfg.Option[*Runtime] {
 	if tracer == nil {
-		return cfg.NoOp[*Config]{}
+		return cfg.NoOp[*Runtime]{}
 	}
 
-	return cfg.Register(func(config *Config) *Config {
-		config.tracer = tracer
+	return cfg.Register(func(r *Runtime) *Runtime {
+		r.tracer = tracer
 
-		return config
+		return r
 	})
 }

@@ -2,16 +2,14 @@ package micron
 
 import (
 	"context"
+	"github.com/zalgonoise/micron/log"
+	"github.com/zalgonoise/micron/metrics"
+	"go.opentelemetry.io/otel/trace/noop"
 	"log/slog"
 
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
-
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/selector"
 )
 
 const (
@@ -23,33 +21,6 @@ const (
 )
 
 var ErrEmptySelector = errs.WithDomain(errDomain, ErrEmpty, ErrSelector)
-
-// Runtime describes the capabilities of a cron runtime, which allows a goroutine execution of its Run method,
-// and has its errors channeled in the returned value from Err.
-//
-// Implementations of Runtime must focus on the uptime and closure of the cron component. For this, it will use
-// the input context.Context in Run to allow being halted on-demand by the caller (with context cancellation or
-// timeout).
-//
-// Considering that Run should be a blocking function to be executed in a goroutine, the Err method must expose an
-// errors channel that pipes any raised errors during its execution back to the caller. It is the responsibility of the
-// caller to consume these errors appropriately, within the logic of their app.
-//
-// A Runtime should leverage a selector.Selector to cycle through different jobs.
-type Runtime interface {
-	// Run kicks-off the cron module using the input context.Context.
-	//
-	// This is a blocking call that should be executed in a goroutine. The input context.Context can be leveraged to
-	// define when should the cron Runtime be halted, for example with context cancellation or timeout.
-	//
-	// Any error raised within a Run cycle is channeled to the Runtime errors channel, accessible with the Err method.
-	Run(ctx context.Context)
-	// Err returns a receive-only errors channel, allowing the caller to consumer any errors raised during the execution
-	// of cron jobs.
-	//
-	// It is the responsibility of the caller to consume these errors appropriately, within the logic of their app.
-	Err() <-chan error
-}
 
 // Selector describes the capabilities of a cron selector, which picks up the next job to execute (out of a set of
 // executor.Executor)
@@ -79,13 +50,26 @@ type Selector interface {
 // Metrics describes the actions that register Runtime-related metrics.
 type Metrics interface {
 	// IsUp signals whether the Runtime is running or not.
-	IsUp(bool)
+	IsUp(ctx context.Context, up bool)
 }
 
-type runtime struct {
+// Runtime describes the capabilities of a cron runtime, which allows a goroutine execution of its Run method,
+// and has its errors channeled in the returned value from Err.
+//
+// This implementation of Runtime focuses on the uptime and closure of the cron component. For this, it will use
+// the input context.Context in Run to allow being halted on-demand by the caller (with context cancellation or
+// timeout).
+//
+// Considering that Run should be a blocking function to be executed in a goroutine, the Err method must expose an
+// errors channel that pipes any raised errors during its execution back to the caller. It is the responsibility of the
+// caller to consume these errors appropriately, within the logic of their app.
+//
+// A Runtime should leverage a selector.Selector to cycle through different jobs.
+type Runtime struct {
 	sel Selector
-
 	err chan error
+
+	errBufferSize int
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -98,16 +82,16 @@ type runtime struct {
 // define when should the cron Runtime be halted, for example with context cancellation or timeout.
 //
 // Any error raised within a Run cycle is channeled to the Runtime errors channel, accessible with the Err method.
-func (r runtime) Run(ctx context.Context) {
+func (r *Runtime) Run(ctx context.Context) {
 	ctx, span := r.tracer.Start(ctx, "Runtime.Run")
 	defer span.End()
 
 	r.logger.InfoContext(ctx, "starting cron")
-	r.metrics.IsUp(true)
+	r.metrics.IsUp(ctx, true)
 
 	defer func() {
 		r.logger.InfoContext(ctx, "closing cron")
-		r.metrics.IsUp(false)
+		r.metrics.IsUp(ctx, false)
 		span.AddEvent("closing runtime")
 	}()
 
@@ -127,7 +111,7 @@ func (r runtime) Run(ctx context.Context) {
 // of cron jobs.
 //
 // It is the responsibility of the caller to consume these errors appropriately, within the logic of their app.
-func (r runtime) Err() <-chan error {
+func (r *Runtime) Err() <-chan error {
 	return r.err
 }
 
@@ -136,62 +120,38 @@ func (r runtime) Err() <-chan error {
 // The minimum requirements to create a Runtime is to supply either a selector.Selector through the WithSelector option,
 // or a (set of) executor.Executor(s) through the WithJob option. The caller is free to select any they desire,
 // and as such both means of creating this requirement are served as cfg.Option.
-func New(options ...cfg.Option[*Config]) (Runtime, error) {
-	config := cfg.Set(defaultConfig(), options...)
+func New(options ...cfg.Option[*Runtime]) (*Runtime, error) {
+	r := cfg.Set(defaultRuntime(), options...)
 
-	return newRuntime(config)
+	return validate(r)
 }
 
-func newRuntime(config *Config) (Runtime, error) {
-	// validate input
-	if config.sel == nil {
-		if len(config.execs) == 0 {
-			return NoOp(), errs.Join(ErrEmptySelector, selector.ErrEmptyExecutorsList)
-		}
-
-		sel, err := selector.New(selector.WithExecutors(config.execs...))
-		if err != nil {
-			return NoOp(), err
-		}
-
-		config.sel = sel
+func validate(r *Runtime) (*Runtime, error) {
+	if r.sel == nil {
+		return nil, ErrEmptySelector
 	}
 
-	size := config.errBufferSize
-	if size < minBufferSize {
-		size = defaultBufferSize
+	if r.err == nil {
+		r.err = make(chan error, defaultBufferSize)
 	}
 
-	r := runtime{
-		sel: config.sel,
-		err: make(chan error, size),
-
-		logger:  slog.New(config.handler),
-		metrics: config.metrics,
-		tracer:  config.tracer,
+	if r.metrics == nil {
+		r.metrics = metrics.NoOp()
 	}
 
-	if config.handler == nil {
-		config.handler = log.NoOp()
+	if r.logger == nil {
+		r.logger = slog.New(log.NoOp())
 	}
 
-	r.logger = slog.New(config.handler)
-
-	if config.metrics == nil {
-		config.metrics = metrics.NoOp()
-	}
-
-	r.metrics = config.metrics
-
-	if config.tracer == nil {
-		config.tracer = noop.NewTracerProvider().Tracer("no-op tracer")
+	if r.tracer == nil {
+		r.tracer = noop.NewTracerProvider().Tracer("micron")
 	}
 
 	return r, nil
 }
 
-// NoOp returns a no-op Runtime.
-func NoOp() Runtime {
+// NoOp returns a no-op cron runtime.
+func NoOp() noOpRuntime {
 	return noOpRuntime{}
 }
 
