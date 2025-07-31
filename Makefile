@@ -1,8 +1,7 @@
-
 lint:
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint run
 
-test-unit: lint
+test:
 	mkdir -p reports/coverage
 	go test ./... -coverprofile=reports/coverage/coverage.out
 
