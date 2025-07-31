@@ -29,9 +29,9 @@ var ErrEmptyExecutorsList = errs.WithDomain(errSelectorDomain, ErrEmpty, ErrExec
 // Metrics describes the actions that register Selector-related metrics.
 type Metrics interface {
 	// IncSelectorSelectCalls increases the count of Select calls, by the Selector.
-	IncSelectorSelectCalls()
+	IncSelectorSelectCalls(ctx context.Context)
 	// IncSelectorSelectErrors increases the count of Select call errors, by the Selector.
-	IncSelectorSelectErrors()
+	IncSelectorSelectErrors(ctx context.Context)
 }
 
 type Selector struct {
@@ -57,7 +57,7 @@ func (s *Selector) Next(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "Selector.Select")
 	defer span.End()
 
-	s.metrics.IncSelectorSelectCalls()
+	s.metrics.IncSelectorSelectCalls(ctx)
 	s.logger.InfoContext(ctx, "selecting the next task")
 
 	// minStepDuration ensures that each execution is locked to the seconds mark and
@@ -67,7 +67,7 @@ func (s *Selector) Next(ctx context.Context) error {
 	if len(s.exec) == 0 {
 		err := ErrEmptyExecutorsList
 
-		s.metrics.IncSelectorSelectCalls()
+		s.metrics.IncSelectorSelectCalls(ctx)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		s.logger.ErrorContext(ctx, "no tasks configured for execution",
@@ -114,7 +114,7 @@ func (s *Selector) Next(ctx context.Context) error {
 			return nil
 		}
 
-		s.metrics.IncSelectorSelectCalls()
+		s.metrics.IncSelectorSelectCalls(ctx)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		s.logger.ErrorContext(ctx, "failed to select and execute the next task",
@@ -176,7 +176,7 @@ func New(options ...cfg.Option[*Config]) (*Selector, error) {
 	return &Selector{
 		timeout: config.timeout,
 		exec:    config.exec,
-		logger:  slog.New(config.handler),
+		logger:  config.logger,
 		metrics: config.metrics,
 		tracer:  config.tracer,
 	}, nil
@@ -191,7 +191,7 @@ func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, err
 
 	return &BlockingSelector{
 		exec:    config.exec,
-		logger:  slog.New(config.handler),
+		logger:  config.logger,
 		metrics: config.metrics,
 		tracer:  config.tracer,
 	}, nil

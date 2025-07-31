@@ -17,16 +17,16 @@ type Config struct {
 	exec    []executor.Executor
 	timeout time.Duration
 
-	handler slog.Handler
+	logger  *slog.Logger
 	metrics Metrics
 	tracer  trace.Tracer
 }
 
 func defaultConfig() *Config {
 	return &Config{
-		handler: log.NoOp(),
+		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("selector's no-op tracer"),
+		tracer:  noop.NewTracerProvider().Tracer("micron.selector"),
 	}
 }
 
@@ -99,7 +99,7 @@ func WithLogger(logger *slog.Logger) cfg.Option[*Config] {
 	}
 
 	return cfg.Register(func(config *Config) *Config {
-		config.handler = logger.Handler()
+		config.logger = logger
 
 		return config
 	})
@@ -112,7 +112,7 @@ func WithLogHandler(handler slog.Handler) cfg.Option[*Config] {
 	}
 
 	return cfg.Register(func(config *Config) *Config {
-		config.handler = handler
+		config.logger = slog.New(handler)
 
 		return config
 	})

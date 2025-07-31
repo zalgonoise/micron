@@ -34,7 +34,7 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "Selector.Select")
 	defer span.End()
 
-	s.metrics.IncSelectorSelectCalls()
+	s.metrics.IncSelectorSelectCalls(ctx)
 	s.logger.InfoContext(ctx, "selecting the next task")
 
 	// minStepDuration ensures that each execution is locked to the seconds mark and
@@ -53,7 +53,7 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	}
 
 	if err != nil {
-		s.metrics.IncSelectorSelectCalls()
+		s.metrics.IncSelectorSelectCalls(ctx)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		s.logger.ErrorContext(ctx, "no tasks configured for execution",
