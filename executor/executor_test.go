@@ -13,7 +13,6 @@ import (
 
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/schedule/cronlex"
 )
 
 type testScheduler struct{}
@@ -146,7 +145,7 @@ func TestNew(t *testing.T) {
 			conf: []cfg.Option[*Executable]{
 				WithSchedule(cron, time.Local),
 			},
-			err: cronlex.ErrInvalidFrequency,
+			err: ErrEmptyScheduler,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {

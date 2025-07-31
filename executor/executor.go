@@ -232,7 +232,7 @@ func New(id string, runners []Runner, options ...cfg.Option[*Executable]) (*Exec
 
 func validate(id string, e *Executable) (*Executable, error) {
 	if len(e.runners) == 0 {
-		return nil, ErrRunnerList
+		return nil, ErrEmptyRunnerList
 	}
 
 	if e.cron == nil {
