@@ -11,12 +11,12 @@ func NoOp() Metrics {
 
 type noOpMetrics struct{}
 
-func (noOpMetrics) IncSchedulerNextCalls()                                    {}
-func (noOpMetrics) IncSelectorSelectCalls()                                   {}
-func (noOpMetrics) IncSelectorSelectErrors()                                  {}
-func (noOpMetrics) IncExecutorExecCalls(string)                               {}
-func (noOpMetrics) IncExecutorExecErrors(string)                              {}
+func (noOpMetrics) IncSchedulerNextCalls(context.Context)                     {}
+func (noOpMetrics) IncSelectorSelectCalls(context.Context)                    {}
+func (noOpMetrics) IncSelectorSelectErrors(context.Context)                   {}
+func (noOpMetrics) IncExecutorExecCalls(context.Context, string)              {}
+func (noOpMetrics) IncExecutorExecErrors(context.Context, string)             {}
 func (noOpMetrics) ObserveExecLatency(context.Context, string, time.Duration) {}
-func (noOpMetrics) IncExecutorNextCalls(string)                               {}
-func (noOpMetrics) IsUp(bool)                                                 {}
+func (noOpMetrics) IncExecutorNextCalls(context.Context, string)              {}
+func (noOpMetrics) IsUp(context.Context, bool)                                {}
 func (noOpMetrics) Shutdown(context.Context) error                            { return nil }

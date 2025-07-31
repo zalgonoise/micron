@@ -31,23 +31,23 @@ type Prometheus struct {
 	cronUp                   prometheus.Gauge
 }
 
-func (m *Prometheus) IncSchedulerNextCalls() {
+func (m *Prometheus) IncSchedulerNextCalls(_ context.Context) {
 	m.schedulerNextCount.Inc()
 }
 
-func (m *Prometheus) IncSelectorSelectCalls() {
+func (m *Prometheus) IncSelectorSelectCalls(_ context.Context) {
 	m.selectorSelectCount.Inc()
 }
 
-func (m *Prometheus) IncSelectorSelectErrors() {
+func (m *Prometheus) IncSelectorSelectErrors(_ context.Context) {
 	m.selectorSelectErrorCount.Inc()
 }
 
-func (m *Prometheus) IncExecutorExecCalls(id string) {
+func (m *Prometheus) IncExecutorExecCalls(_ context.Context, id string) {
 	m.executorExecCount.WithLabelValues(id).Inc()
 }
 
-func (m *Prometheus) IncExecutorExecErrors(id string) {
+func (m *Prometheus) IncExecutorExecErrors(_ context.Context, id string) {
 	m.executorExecErrorCount.WithLabelValues(id).Inc()
 }
 
@@ -67,11 +67,11 @@ func (m *Prometheus) ObserveExecLatency(ctx context.Context, id string, dur time
 	m.executorLatency.WithLabelValues(id).Observe(dur.Seconds())
 }
 
-func (m *Prometheus) IncExecutorNextCalls(id string) {
+func (m *Prometheus) IncExecutorNextCalls(_ context.Context, id string) {
 	m.executorNextCount.WithLabelValues(id).Inc()
 }
 
-func (m *Prometheus) IsUp(up bool) {
+func (m *Prometheus) IsUp(_ context.Context, up bool) {
 	if up {
 		m.cronUp.Set(1.0)
 

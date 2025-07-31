@@ -16,16 +16,14 @@ const (
 )
 
 type Metrics interface {
-	IncSchedulerNextCalls()
-	IncSelectorSelectCalls()
-	IncSelectorSelectErrors()
-	IncExecutorExecCalls(id string)
-	IncExecutorExecErrors(id string)
+	IncSchedulerNextCalls(ctx context.Context)
+	IncSelectorSelectCalls(ctx context.Context)
+	IncSelectorSelectErrors(ctx context.Context)
+	IncExecutorExecCalls(ctx context.Context, id string)
+	IncExecutorExecErrors(ctx context.Context, id string)
 	ObserveExecLatency(ctx context.Context, id string, dur time.Duration)
-	IncExecutorNextCalls(id string)
-	IsUp(bool)
-
-	Shutdown(ctx context.Context) error
+	IncExecutorNextCalls(ctx context.Context, id string)
+	IsUp(ctx context.Context, isUp bool)
 }
 
 func New(options ...cfg.Option[Config]) (Metrics, error) {
