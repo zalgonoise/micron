@@ -3,7 +3,6 @@ package schedule
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/require"
 	"log/slog"
 	"testing"
 	"time"
@@ -121,10 +120,15 @@ func TestCronSchedule_Next(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			schedule, err := cronlex.Parse(testcase.cron)
-			require.NoError(t, err)
+			if err != nil {
+				is.True(t, errors.Is(err, testcase.err))
+
+				return
+			}
 
 			sched, err := New(
 				WithSchedule(schedule),
+				WithLocation(time.UTC),
 				WithLogHandler(log.NoOp()),
 				WithMetrics(metrics.NoOp()),
 				WithTrace(noop.NewTracerProvider().Tracer("test")),
@@ -158,11 +162,8 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("AllEmptyOptions", func(t *testing.T) {
-		schedule, err := cronlex.Parse("")
-		is.Empty(t, err)
-
-		_, err = New(
-			WithSchedule(schedule),
+		_, err := New(
+			WithSchedule(nil),
 			WithLocation(nil),
 			WithLogger(nil),
 			WithLogHandler(nil),
@@ -170,7 +171,7 @@ func TestConfig(t *testing.T) {
 			WithTrace(nil),
 		)
 
-		is.True(t, errors.Is(err, cronlex.ErrEmptyInput))
+		is.True(t, errors.Is(err, ErrEmptySchedule))
 	})
 }
 
