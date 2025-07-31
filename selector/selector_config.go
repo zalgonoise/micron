@@ -8,9 +8,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/zalgonoise/micron/executor"
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
+	"github.com/zalgonoise/micron/v3/executor"
+	"github.com/zalgonoise/micron/v3/log"
+	"github.com/zalgonoise/micron/v3/metrics"
 )
 
 type Config struct {

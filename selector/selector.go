@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/zalgonoise/micron/executor"
+	"github.com/zalgonoise/micron/v3/executor"
 )
 
 const (
