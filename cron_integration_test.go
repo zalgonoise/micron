@@ -15,10 +15,10 @@ import (
 	"github.com/zalgonoise/x/is"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/zalgonoise/micron"
-	"github.com/zalgonoise/micron/executor"
-	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/selector"
+	"github.com/zalgonoise/micron/v3"
+	"github.com/zalgonoise/micron/v3/executor"
+	"github.com/zalgonoise/micron/v3/metrics"
+	"github.com/zalgonoise/micron/v3/selector"
 )
 
 type testRunner struct {

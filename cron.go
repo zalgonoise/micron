@@ -10,8 +10,8 @@ import (
 	"github.com/zalgonoise/cfg"
 	"github.com/zalgonoise/x/errs"
 
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
+	"github.com/zalgonoise/micron/v3/log"
+	"github.com/zalgonoise/micron/v3/metrics"
 )
 
 const (
