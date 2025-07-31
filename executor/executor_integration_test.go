@@ -13,11 +13,11 @@ import (
 	"github.com/zalgonoise/x/is"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/zalgonoise/micron/executor"
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/schedule"
-	"github.com/zalgonoise/micron/schedule/cronlex"
+	"github.com/zalgonoise/micron/v3/executor"
+	"github.com/zalgonoise/micron/v3/log"
+	"github.com/zalgonoise/micron/v3/metrics"
+	"github.com/zalgonoise/micron/v3/schedule"
+	"github.com/zalgonoise/micron/v3/schedule/cronlex"
 )
 
 type testRunner struct {
