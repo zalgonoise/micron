@@ -19,7 +19,7 @@ linters-settings:
     sections:
       - standard
       - default
-      - prefix(github.com/zalgonoise/micron)
+      - prefix(github.com/zalgonoise/micron/v3)
   gofmt:
     # simplify code: gofmt with `-s` option, true by default
     simplify: true
