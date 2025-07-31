@@ -10,9 +10,9 @@ import (
 	"github.com/zalgonoise/x/is"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/zalgonoise/micron/log"
-	"github.com/zalgonoise/micron/metrics"
-	"github.com/zalgonoise/micron/schedule/cronlex"
+	"github.com/zalgonoise/micron/v3/log"
+	"github.com/zalgonoise/micron/v3/metrics"
+	"github.com/zalgonoise/micron/v3/schedule/cronlex"
 )
 
 func TestCronSchedule_Next(t *testing.T) {
