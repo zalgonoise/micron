@@ -8,12 +8,10 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/zalgonoise/micron/executor"
 )
 
 type BlockingSelector struct {
-	exec []executor.Executor
+	exec []Executor
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -66,8 +64,8 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	return nil
 }
 
-func (s *BlockingSelector) next(ctx context.Context) []executor.Executor {
-	slices.SortFunc(s.exec, func(a, b executor.Executor) int {
+func (s *BlockingSelector) next(ctx context.Context) []Executor {
+	slices.SortFunc(s.exec, func(a, b Executor) int {
 		return a.Next(ctx).Compare(b.Next(ctx))
 	})
 

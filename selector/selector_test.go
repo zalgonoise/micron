@@ -23,7 +23,7 @@ func TestConfig(t *testing.T) {
 	cron := "* * * * * *"
 
 	exec, err := executor.New("test", []executor.Runner{runner},
-		executor.WithSchedule(cron),
+		executor.WithSchedule(cron, time.Local),
 	)
 	is.Empty(t, err)
 
@@ -165,7 +165,7 @@ func TestWithObservability(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			exec, err := executor.New("test", []executor.Runner{testcase.runner},
-				executor.WithSchedule(cron),
+				executor.WithSchedule(cron, time.Local),
 			)
 			is.Empty(t, err)
 

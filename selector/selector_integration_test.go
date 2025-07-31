@@ -1,4 +1,4 @@
-//go:build integration
+////go:build integration
 
 package selector_test
 
@@ -94,13 +94,12 @@ func TestSelector(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			testFunc := func(t *testing.T, withBlock bool) {
 				results := make([]int, 0, len(testcase.wants))
-				execs := make([]executor.Executor, 0, len(testcase.execMap))
+				execs := make([]selector.Executor, 0, len(testcase.execMap))
 
 				var n int
 				for cron, runners := range testcase.execMap {
 					exec, err := executor.New(fmt.Sprintf("%d", n), runners,
-						executor.WithSchedule(cron),
-						executor.WithLocation(time.Local),
+						executor.WithSchedule(cron, time.Local),
 						executor.WithLogHandler(h),
 					)
 					is.Empty(t, err)
@@ -186,8 +185,7 @@ func TestNonBlocking(t *testing.T) {
 
 			return testErr
 		})},
-		executor.WithSchedule(cron),
-		executor.WithLocation(time.Local),
+		executor.WithSchedule(cron, time.Local),
 		executor.WithLogHandler(h),
 	)
 	is.Empty(t, err)

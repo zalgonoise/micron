@@ -26,6 +26,34 @@ const (
 
 var ErrEmptyExecutorsList = errs.WithDomain(errSelectorDomain, ErrEmpty, ErrExecutorsList)
 
+// Executor describes the capabilities of cron job's executor component, which is based on fetching the next execution's
+// time, Next; as well as running the job, Exec. It also exposes an ID method to allow access to this Executor's
+// configured ID or name.
+//
+// Implementations of Executor must focus on the logic of the Exec method, which should contain the logic of the Next
+// method as well. It should not be the responsibility of other components to wait until it is time to execute the job;
+// but actually the Executor's responsibility to consider it in its Exec method. That being said, its Next method (just
+// like its ID method) allows access to some of the details of the executor if the caller needs that information; as
+// helpers.
+//
+// The logic behind Next and generally calculating the time for the next job execution should be deferred to a
+// schedule.Scheduler, which should be part of the Executor.
+//
+// One Executor may contain multiple Runner, as a job may be composed of several (smaller) tasks. However, an Executor
+// is identified by a single ID.
+type Executor interface {
+	// Exec runs the task when on its scheduled time.
+	//
+	// For this, Exec leverages the Executor's underlying schedule.Scheduler to retrieve the job's next execution time,
+	// waits for it, and calls Runner.Run on each configured Runner. All raised errors are joined and returned at the end
+	// of this call.
+	Exec(ctx context.Context) error
+	// Next calls the Executor's underlying schedule.Scheduler Next method.
+	Next(ctx context.Context) time.Time
+	// ID returns this Executor's ID.
+	ID() string
+}
+
 // Metrics describes the actions that register Selector-related metrics.
 type Metrics interface {
 	// IncSelectorSelectCalls increases the count of Select calls, by the Selector.
@@ -36,7 +64,7 @@ type Metrics interface {
 
 type Selector struct {
 	timeout time.Duration
-	exec    []executor.Executor
+	exec    []Executor
 
 	logger  *slog.Logger
 	metrics Metrics

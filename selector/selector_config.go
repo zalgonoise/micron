@@ -14,7 +14,7 @@ import (
 )
 
 type Config struct {
-	exec    []executor.Executor
+	exec    []Executor
 	timeout time.Duration
 
 	logger  *slog.Logger
@@ -34,8 +34,8 @@ func defaultConfig() *Config {
 //
 // This call returns a cfg.NoOp cfg.Option if the input set of executor.Executor is empty, or contains
 // only nil and / or no-op executor.Executor.
-func WithExecutors(executors ...executor.Executor) cfg.Option[*Config] {
-	execs := make([]executor.Executor, 0, len(executors))
+func WithExecutors(executors ...Executor) cfg.Option[*Config] {
+	execs := make([]Executor, 0, len(executors))
 
 	for i := range executors {
 		if executors[i] == nil || executors[i] == executor.NoOp() {
