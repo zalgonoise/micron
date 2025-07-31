@@ -17,6 +17,7 @@ import (
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule"
+	"github.com/zalgonoise/micron/schedule/cronlex"
 )
 
 type testRunner struct {
@@ -42,7 +43,10 @@ func testRunnable(ch chan<- int, value int) func(ctx context.Context) error {
 
 func TestNewExecutor(t *testing.T) {
 	cron := "* * * * * *"
-	sched, err := schedule.New(schedule.WithSchedule(cron))
+	s, err := cronlex.Parse(cron)
+	is.Empty(t, err)
+
+	sched, err := schedule.New(schedule.WithSchedule(s))
 	is.Empty(t, err)
 
 	for _, testcase := range []struct {

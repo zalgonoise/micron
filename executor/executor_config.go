@@ -11,6 +11,7 @@ import (
 	"github.com/zalgonoise/micron/log"
 	"github.com/zalgonoise/micron/metrics"
 	"github.com/zalgonoise/micron/schedule"
+	"github.com/zalgonoise/micron/schedule/cronlex"
 )
 
 func defaultExecutable() *Executable {
@@ -48,12 +49,17 @@ func WithSchedule(cron string, loc *time.Location) cfg.Option[*Executable] {
 		return cfg.NoOp[*Executable]{}
 	}
 
+	s, err := cronlex.Parse(cron)
+	if err != nil {
+		return cfg.NoOp[*Executable]{}
+	}
+
 	if loc == nil {
 		loc = time.Local
 	}
 
 	scheduler, err := schedule.New(
-		schedule.WithSchedule(cron),
+		schedule.WithSchedule(s),
 		schedule.WithLocation(loc),
 	)
 
