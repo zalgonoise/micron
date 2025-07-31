@@ -14,6 +14,12 @@ import (
 )
 
 const (
+	// traceIDKey is used as the trace ID key value in the prometheus.Labels in a prometheus.Exemplar.
+	//
+	// Its value of `trace_id` complies with the OpenTelemetry specification for metrics' exemplars, as seen in:
+	// https://opentelemetry.io/docs/specs/otel/metrics/data-model/#exemplars
+	traceIDKey = "trace_id"
+
 	defaultPort    = 13003
 	defaultTimeout = 15 * time.Second
 )
@@ -111,7 +117,7 @@ func (m *Prometheus) Shutdown(ctx context.Context) error {
 	return m.server.Shutdown(ctx)
 }
 
-func newPrometheus(port int) (Metrics, error) {
+func NewPrometheus(port int) (*Prometheus, error) {
 	if port <= 0 {
 		port = defaultPort
 	}
@@ -156,7 +162,7 @@ func newPrometheus(port int) (Metrics, error) {
 
 	reg, err := prom.Registry()
 	if err != nil {
-		return noOpMetrics{}, err
+		return nil, err
 	}
 
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{

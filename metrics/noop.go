@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func NoOp() Metrics {
+func NoOp() noOpMetrics {
 	return noOpMetrics{}
 }
 
