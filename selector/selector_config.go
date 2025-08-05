@@ -16,6 +16,7 @@ import (
 type Config struct {
 	exec    []Executor
 	timeout time.Duration
+	clock   Clock
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -24,6 +25,7 @@ type Config struct {
 
 func defaultConfig() *Config {
 	return &Config{
+		clock:   NewClock(),
 		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
 		tracer:  noop.NewTracerProvider().Tracer("micron.selector"),
@@ -74,6 +76,22 @@ func WithTimeout(dur time.Duration) cfg.Option[*Config] {
 
 	return cfg.Register(func(config *Config) *Config {
 		config.timeout = dur
+
+		return config
+	})
+}
+
+// WithClock configures the selector with a Clock implementation that returns the current time, real or otherwise.
+//
+// If unset, the Selector or BlockingSelector is configured with a real clock implementation using the standard
+// library's time.Now call.
+func WithClock(clock Clock) cfg.Option[*Config] {
+	if clock == nil {
+		return cfg.NoOp[*Config]{}
+	}
+
+	return cfg.Register(func(config *Config) *Config {
+		config.clock = clock
 
 		return config
 	})

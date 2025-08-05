@@ -68,11 +68,22 @@ func TestConfig(t *testing.T) {
 				WithTimeout(30 * time.Millisecond),
 			},
 		},
-
 		{
 			name: "WithTimeout/OK",
 			opts: []cfg.Option[*Config]{
 				WithTimeout(100 * time.Millisecond),
+			},
+		},
+		{
+			name: "WithClock/RealClock",
+			opts: []cfg.Option[*Config]{
+				WithClock(NewClock()),
+			},
+		},
+		{
+			name: "WithClock/Zero",
+			opts: []cfg.Option[*Config]{
+				WithClock(nil),
 			},
 		},
 		{
@@ -189,6 +200,7 @@ func TestZeroExecutors(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
 			(&BlockingSelector{
+				clock:   NewClock(),
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),
@@ -199,6 +211,7 @@ func TestZeroExecutors(t *testing.T) {
 		is.True(t, errors.Is(
 			ErrEmptyExecutorsList,
 			(&Selector{
+				clock:   NewClock(),
 				logger:  slog.New(log.NoOp()),
 				metrics: metrics.NoOp(),
 				tracer:  noop.NewTracerProvider().Tracer("test"),

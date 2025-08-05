@@ -47,11 +47,15 @@ type Executor interface {
 	// For this, Exec leverages the Executor's underlying schedule.Scheduler to retrieve the job's next execution time,
 	// waits for it, and calls Runner.Run on each configured Runner. All raised errors are joined and returned at the end
 	// of this call.
-	Exec(ctx context.Context) error
+	Exec(ctx context.Context, now time.Time) error
 	// Next calls the Executor's underlying schedule.Scheduler Next method.
-	Next(ctx context.Context) time.Time
+	Next(ctx context.Context, now time.Time) time.Time
 	// ID returns this Executor's ID.
 	ID() string
+}
+
+type Clock interface {
+	Now() time.Time
 }
 
 // Metrics describes the actions that register Selector-related metrics.
@@ -65,6 +69,7 @@ type Metrics interface {
 type Selector struct {
 	timeout time.Duration
 	exec    []Executor
+	clock   Clock
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -111,13 +116,16 @@ func (s *Selector) Next(ctx context.Context) error {
 	errCh := make(chan error)
 
 	go func() {
-		var err error
+		var (
+			err error
+			now = s.clock.Now()
+		)
 
 		switch len(s.exec) {
 		case 1:
-			err = s.exec[0].Exec(ctx)
+			err = s.exec[0].Exec(ctx, now)
 		default:
-			err = executor.Multi(ctx, s.next(ctx)...)
+			err = executor.Multi(ctx, now, s.next(ctx, now)...)
 		}
 
 		select {
@@ -153,15 +161,14 @@ func (s *Selector) Next(ctx context.Context) error {
 	}
 }
 
-func (s *Selector) next(ctx context.Context) []executor.Executor {
+func (s *Selector) next(ctx context.Context, now time.Time) []executor.Executor {
 	var (
 		next time.Duration
 		exec = make([]executor.Executor, 0, len(s.exec))
-		now  = time.Now()
 	)
 
 	for i := range s.exec {
-		t := s.exec[i].Next(ctx).Sub(now)
+		t := s.exec[i].Next(ctx, now).Sub(now)
 
 		switch {
 		case i == 0:
@@ -204,6 +211,7 @@ func New(options ...cfg.Option[*Config]) (*Selector, error) {
 	return &Selector{
 		timeout: config.timeout,
 		exec:    config.exec,
+		clock:   config.clock,
 		logger:  config.logger,
 		metrics: config.metrics,
 		tracer:  config.tracer,
@@ -219,6 +227,7 @@ func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, err
 
 	return &BlockingSelector{
 		exec:    config.exec,
+		clock:   config.clock,
 		logger:  config.logger,
 		metrics: config.metrics,
 		tracer:  config.tracer,

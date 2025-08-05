@@ -11,7 +11,8 @@ import (
 )
 
 type BlockingSelector struct {
-	exec []Executor
+	exec  []Executor
+	clock Clock
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -39,15 +40,18 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	// a runner is not executed more than once per trigger.
 	defer time.Sleep(minStepDuration)
 
-	var err error
+	var (
+		err error
+		now = s.clock.Now()
+	)
 
 	switch len(s.exec) {
 	case 0:
 		err = ErrEmptyExecutorsList
 	case 1:
-		err = s.exec[0].Exec(ctx)
+		err = s.exec[0].Exec(ctx, now)
 	default:
-		err = s.next(ctx)[0].Exec(ctx)
+		err = s.next(ctx, now)[0].Exec(ctx, now)
 	}
 
 	if err != nil {
@@ -64,16 +68,16 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	return nil
 }
 
-func (s *BlockingSelector) next(ctx context.Context) []Executor {
+func (s *BlockingSelector) next(ctx context.Context, now time.Time) []Executor {
 	slices.SortFunc(s.exec, func(a, b Executor) int {
-		return a.Next(ctx).Compare(b.Next(ctx))
+		return a.Next(ctx, now).Compare(b.Next(ctx, now))
 	})
 
 	if s.logger.Enabled(ctx, slog.LevelDebug) {
 		times := make(map[string]string, len(s.exec))
 
 		for i := range s.exec {
-			times[s.exec[i].ID()] = s.exec[i].Next(ctx).Format(time.RFC3339)
+			times[s.exec[i].ID()] = s.exec[i].Next(ctx, now).Format(time.RFC3339)
 		}
 
 		s.logger.DebugContext(ctx, "selecting the next task",
