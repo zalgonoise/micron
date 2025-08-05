@@ -143,12 +143,15 @@ func TestExecutor(t *testing.T) {
 			results := make([]int, 0, len(testcase.wants))
 
 			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+
+			now := time.Now()
+
 			go func(t *testing.T, err error) {
 				defer cancel()
 
-				_ = exec.Next(ctx)
+				_ = exec.Next(ctx, now)
 
-				execErr := exec.Exec(ctx)
+				execErr := exec.Exec(ctx, now)
 				is.True(t, errors.Is(execErr, err))
 			}(t, testcase.err)
 

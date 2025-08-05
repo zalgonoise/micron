@@ -112,9 +112,9 @@ func TestConfig(t *testing.T) {
 func TestNoOp(t *testing.T) {
 	noOp := NoOp()
 
-	is.Equal(t, time.Time{}, noOp.Next(context.Background()))
+	is.Equal(t, time.Time{}, noOp.Next(context.Background(), time.Now()))
 	is.Equal(t, "", noOp.ID())
-	is.Empty(t, noOp.Exec(context.Background()))
+	is.Empty(t, noOp.Exec(context.Background(), time.Now()))
 }
 
 func TestNew(t *testing.T) {

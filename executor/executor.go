@@ -113,13 +113,13 @@ type Executable struct {
 }
 
 // Next calls the Executor's underlying schedule.Scheduler Next method.
-func (e *Executable) Next(ctx context.Context) time.Time {
+func (e *Executable) Next(ctx context.Context, now time.Time) time.Time {
 	ctx, span := e.tracer.Start(ctx, "Executor.Next")
 	defer span.End()
 
 	e.metrics.IncExecutorNextCalls(ctx, e.id)
 
-	next := e.cron.Next(ctx, time.Now())
+	next := e.cron.Next(ctx, now)
 
 	e.logger.InfoContext(ctx, "next job",
 		slog.String("id", e.id),
@@ -139,7 +139,7 @@ func (e *Executable) Next(ctx context.Context) time.Time {
 // For this, Exec leverages the Executor's underlying schedule.Scheduler to retrieve the job's next execution time,
 // waits for it, and calls Runner.Run on each configured Runner. All raised errors are joined and returned at the end
 // of this call.
-func (e *Executable) Exec(ctx context.Context) error {
+func (e *Executable) Exec(ctx context.Context, now time.Time) error {
 	ctx, span := e.tracer.Start(ctx, "Executor.Exec")
 	defer span.End()
 
@@ -150,14 +150,12 @@ func (e *Executable) Exec(ctx context.Context) error {
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	start := time.Now()
-
 	defer func() {
-		e.metrics.ObserveExecLatency(ctx, e.id, time.Since(start))
+		e.metrics.ObserveExecLatency(ctx, e.id, time.Since(now))
 	}()
 
-	next := e.cron.Next(execCtx, start)
-	timer := time.NewTimer(next.Sub(start))
+	next := e.cron.Next(execCtx, now)
+	timer := time.NewTimer(next.Sub(now))
 
 	defer timer.Stop()
 
@@ -270,14 +268,14 @@ type noOpExecutor struct{}
 // Exec runs the task when on its scheduled time.
 //
 // This is a no-op call, it has no effect and the returned error is always nil.
-func (e noOpExecutor) Exec(context.Context) error {
+func (e noOpExecutor) Exec(_ context.Context, _ time.Time) error {
 	return nil
 }
 
 // Next calls the Executor's underlying schedule.Scheduler Next method.
 //
 // This is a no-op call, it has no effect and the returned time is always zero.
-func (e noOpExecutor) Next(_ context.Context) (t time.Time) {
+func (e noOpExecutor) Next(_ context.Context, _ time.Time) (t time.Time) {
 	return t
 }
 
