@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalgonoise/micron/v3/log"
 	"github.com/zalgonoise/x/is"
 	"go.opentelemetry.io/otel/trace/noop"
 
@@ -35,7 +36,9 @@ func (r testRunner) Run(context.Context) error {
 }
 
 func TestCron(t *testing.T) {
-	h := slog.NewJSONHandler(os.Stderr, nil)
+	logger := log.New(nil,
+		log.WithLevel(slog.LevelDebug),
+		log.WithTraceContext(true))
 
 	testErr := errors.New("test error")
 	values := make(chan int)
@@ -44,6 +47,8 @@ func TestCron(t *testing.T) {
 	runner3 := testRunner{v: 3, ch: values, err: testErr}
 
 	everytime := "* * * * * *"
+	everymin := "0 * * * * *"
+	everyhalfmin := "0/2 * * * * *"
 	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
 	defaultDur := 1005 * time.Millisecond
@@ -73,6 +78,18 @@ func TestCron(t *testing.T) {
 			wants: []int{1, 2},
 		},
 		{
+			name: "TwoExecsTwoRunnersLongShort",
+			execMap: map[string][]executor.Runner{
+				everyhalfmin: {runner1},
+				everymin:     {runner2},
+			},
+			dur: time.Minute + 15*time.Second,
+			wants: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+				1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+				1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+				1, 1, 1, 1, 1, 1, 1, 1, 2},
+		},
+		{
 			name: "TwoExecsOffsetFrequency",
 			execMap: map[string][]executor.Runner{
 				everytime: {runner1},
@@ -93,14 +110,13 @@ func TestCron(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			results := make([]int, 0, len(testcase.wants))
-			execs := make([]executor.Executor, 0, len(testcase.execMap))
+			execs := make([]selector.Executor, 0, len(testcase.execMap))
 
 			var n int
 			for cron, runners := range testcase.execMap {
 				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
-					executor.WithSchedule(cron),
-					executor.WithLocation(time.Local),
-					executor.WithLogHandler(h),
+					executor.WithSchedule(cron, time.Local),
+					executor.WithLogger(logger),
 				)
 				is.Empty(t, err)
 
@@ -110,13 +126,13 @@ func TestCron(t *testing.T) {
 
 			sel, err := selector.New(
 				selector.WithExecutors(execs...),
-				selector.WithLogHandler(h),
+				selector.WithLogger(logger),
 			)
 			is.Empty(t, err)
 
 			c, err := micron.New(
 				micron.WithSelector(sel),
-				micron.WithLogHandler(h),
+				micron.WithLogger(logger),
 				micron.WithErrorBufferSize(5),
 				micron.WithMetrics(metrics.NoOp()),
 				micron.WithTrace(noop.NewTracerProvider().Tracer("test")),
@@ -165,8 +181,7 @@ func TestFillErrorBuffer(t *testing.T) {
 	wants := []int{1, 1}
 
 	exec, err := executor.New("test_exec", []executor.Runner{runner1},
-		executor.WithSchedule("* * * * * *"),
-		executor.WithLocation(time.Local),
+		executor.WithSchedule("* * * * * *", time.Local),
 		executor.WithLogHandler(h),
 	)
 	is.Empty(t, err)
