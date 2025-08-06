@@ -1,6 +1,8 @@
 package log
 
 import (
+	"log/slog"
+
 	"github.com/zalgonoise/cfg"
 )
 
@@ -12,6 +14,7 @@ const (
 type Config struct {
 	format int
 	source bool
+	level  slog.Level
 
 	withTraceID bool
 	withSpanID  bool
@@ -36,6 +39,14 @@ func AsJSON() cfg.Option[Config] {
 func WithSource() cfg.Option[Config] {
 	return cfg.Register(func(config Config) Config {
 		config.source = true
+
+		return config
+	})
+}
+
+func WithLevel(level slog.Level) cfg.Option[Config] {
+	return cfg.Register(func(config Config) Config {
+		config.level = level
 
 		return config
 	})
