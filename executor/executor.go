@@ -121,7 +121,7 @@ func (e *Executable) Next(ctx context.Context, now time.Time) time.Time {
 
 	next := e.cron.Next(ctx, now)
 
-	e.logger.InfoContext(ctx, "next job",
+	e.logger.DebugContext(ctx, "next job",
 		slog.String("id", e.id),
 		slog.Time("at", next),
 	)
