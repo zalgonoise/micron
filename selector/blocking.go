@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -17,6 +18,22 @@ type BlockingSelector struct {
 	logger  *slog.Logger
 	metrics Metrics
 	tracer  trace.Tracer
+}
+
+func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, error) {
+	config := cfg.Set(defaultConfig(), options...)
+
+	if len(config.exec) == 0 {
+		return nil, ErrEmptyExecutorsList
+	}
+
+	return &BlockingSelector{
+		exec:    config.exec,
+		clock:   config.clock,
+		logger:  config.logger,
+		metrics: config.metrics,
+		tracer:  config.tracer,
+	}, nil
 }
 
 // Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and

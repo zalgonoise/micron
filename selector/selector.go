@@ -2,6 +2,7 @@ package selector
 
 import (
 	"context"
+	"iter"
 	"log/slog"
 	"time"
 
@@ -9,8 +10,6 @@ import (
 	"github.com/zalgonoise/x/errs"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/zalgonoise/micron/v3/executor"
 )
 
 const (
@@ -76,123 +75,6 @@ type Selector struct {
 	tracer  trace.Tracer
 }
 
-// Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
-// calls its Exec method.
-//
-// This call also imposes a minimum step duration of 50ms, to ensure that early-runs are not executed twice due to the
-// nature of using clocks in Go. This sleep is deferred to come in after the actual execution of the job.
-//
-// The Selector allows multiple executor.Executor to be configured, and multiple executor.Executor can share similar
-// execution times. If that is the case, the executor is launched in an executor.Multi call.
-//
-// The error returned from a Next call is the error raised by the executor.Executor's Exec call.
-func (s *Selector) Next(ctx context.Context) error {
-	ctx, span := s.tracer.Start(ctx, "Selector.Select")
-	defer span.End()
-
-	s.metrics.IncSelectorSelectCalls(ctx)
-	s.logger.InfoContext(ctx, "selecting the next task")
-
-	// minStepDuration ensures that each execution is locked to the seconds mark and
-	// a runner is not executed more than once per trigger.
-	defer time.Sleep(minStepDuration)
-
-	if len(s.exec) == 0 {
-		err := ErrEmptyExecutorsList
-
-		s.metrics.IncSelectorSelectCalls(ctx)
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		s.logger.ErrorContext(ctx, "no tasks configured for execution",
-			slog.String("error", err.Error()),
-		)
-
-		return err
-	}
-
-	localCtx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-
-	errCh := make(chan error)
-
-	go func() {
-		var (
-			err error
-			now = s.clock.Now()
-		)
-
-		switch len(s.exec) {
-		case 1:
-			err = s.exec[0].Exec(ctx, now)
-		default:
-			err = executor.Multi(ctx, now, s.next(ctx, now)...)
-		}
-
-		select {
-		case <-localCtx.Done():
-			close(errCh)
-
-			return
-		default:
-			errCh <- err
-		}
-	}()
-
-	select {
-	case <-localCtx.Done():
-		return nil
-	case err, ok := <-errCh:
-		if !ok {
-			return nil
-		}
-
-		if err == nil {
-			return nil
-		}
-
-		s.metrics.IncSelectorSelectCalls(ctx)
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		s.logger.ErrorContext(ctx, "failed to select and execute the next task",
-			slog.String("error", err.Error()),
-		)
-
-		return err
-	}
-}
-
-func (s *Selector) next(ctx context.Context, now time.Time) []executor.Executor {
-	var (
-		next time.Duration
-		exec = make([]executor.Executor, 0, len(s.exec))
-	)
-
-	for i := range s.exec {
-		t := s.exec[i].Next(ctx, now).Sub(now)
-
-		switch {
-		case i == 0:
-			next = t
-
-			exec = append(exec, s.exec[i])
-
-			continue
-		case t == next:
-			exec = append(exec, s.exec[i])
-
-			continue
-		case t < next:
-			next = t
-			exec = make([]executor.Executor, 0, len(s.exec))
-			exec = append(exec, s.exec[i])
-
-			continue
-		}
-	}
-
-	return exec
-}
-
 // New creates a Selector with the input cfg.Option(s), also returning an error if raised.
 //
 // Creating a Selector requires at least one executor.Executor, which can be added through the WithExecutors option. To
@@ -218,20 +100,105 @@ func New(options ...cfg.Option[*Config]) (*Selector, error) {
 	}, nil
 }
 
-func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, error) {
-	config := cfg.Set(defaultConfig(), options...)
+// Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
+// calls its Exec method.
+//
+// This call also imposes a minimum step duration of 50ms, to ensure that early-runs are not executed twice due to the
+// nature of using clocks in Go. This sleep is deferred to come in after the actual execution of the job.
+//
+// The Selector allows multiple executor.Executor to be configured, and multiple executor.Executor can share similar
+// execution times. If that is the case, the executor is launched in an executor.Multi call.
+//
+// The error returned from a Next call is the error raised by the executor.Executor's Exec call.
+func (s *Selector) Next(ctx context.Context) error {
+	ctx, span := s.tracer.Start(ctx, "Selector.Select")
+	defer span.End()
 
-	if len(config.exec) == 0 {
-		return nil, ErrEmptyExecutorsList
+	s.metrics.IncSelectorSelectCalls(ctx)
+	s.logger.InfoContext(ctx, "selecting the next task")
+
+	// minStepDuration ensures that each execution is locked to the seconds mark and
+	// a runner is not executed more than once per trigger.
+	defer time.Sleep(minStepDuration)
+
+	localCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	errCh := make(chan error)
+	now := s.clock.Now()
+
+	switch len(s.exec) {
+	case 0:
+		s.metrics.IncSelectorSelectCalls(ctx)
+		span.SetStatus(codes.Error, ErrEmptyExecutorsList.Error())
+		span.RecordError(ErrEmptyExecutorsList)
+		s.logger.ErrorContext(ctx, "no tasks configured for execution",
+			slog.String("error", ErrEmptyExecutorsList.Error()),
+		)
+
+		close(errCh)
+
+		return ErrEmptyExecutorsList
+	case 1:
+		go func() {
+			if err := s.exec[0].Exec(ctx, now); err != nil {
+				errCh <- err
+			}
+
+			close(errCh)
+		}()
+	default:
+		s.next(ctx, now)(func(duration time.Duration, e Executor) bool {
+			s.logger.DebugContext(ctx, "checking task to execute",
+				slog.String("eta", duration.String()),
+				slog.String("id", e.ID()),
+			)
+
+			if duration < minStepDuration {
+				go func() {
+					if err := e.Exec(ctx, now); err != nil {
+						errCh <- err
+					}
+				}()
+			}
+
+			return true
+		})
+
+		close(errCh)
 	}
 
-	return &BlockingSelector{
-		exec:    config.exec,
-		clock:   config.clock,
-		logger:  config.logger,
-		metrics: config.metrics,
-		tracer:  config.tracer,
-	}, nil
+	select {
+	case <-localCtx.Done():
+		return nil
+	case err, ok := <-errCh:
+		if !ok {
+			return nil
+		}
+
+		if err == nil {
+			return nil
+		}
+
+		s.metrics.IncSelectorSelectCalls(ctx)
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		s.logger.ErrorContext(ctx, "failed to select and execute the next task",
+			slog.String("error", err.Error()),
+		)
+
+		return err
+	}
+}
+
+func (s *Selector) next(ctx context.Context, now time.Time) iter.Seq2[time.Duration, Executor] {
+	return func(yield func(dur time.Duration, exec Executor) bool) {
+		for i := range s.exec {
+			if !yield(s.exec[i].Next(ctx, now).Sub(now), s.exec[i]) {
+				return
+			}
+		}
+	}
 }
 
 // NoOp returns a no-op Selector.
