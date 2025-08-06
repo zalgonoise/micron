@@ -71,8 +71,8 @@ import (
 	"fmt"
 	"context"
 	
-	"github.com/zalgonoise/micron"
-	"github.com/zalgonoise/micron/executor"
+	"github.com/zalgonoise/micron/v3"
+	"github.com/zalgonoise/micron/v3/executor"
 )
 
 func main() {
