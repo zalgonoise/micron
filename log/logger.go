@@ -26,10 +26,12 @@ func newHandler(config Config) slog.Handler {
 	case formatText:
 		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: config.source,
+			Level:     config.level,
 		})
 	default:
 		return slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: config.source,
+			Level:     config.level,
 		})
 	}
 }
