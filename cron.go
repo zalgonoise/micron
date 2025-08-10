@@ -2,6 +2,9 @@ package micron
 
 import (
 	"context"
+	"github.com/zalgonoise/micron/v3/executor"
+	"github.com/zalgonoise/micron/v3/schedule"
+	"github.com/zalgonoise/micron/v3/selector"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/trace"
@@ -170,4 +173,20 @@ func (noOpRuntime) Run(context.Context) {}
 // This is a no-op call and the returned receive-only errors channel is always nil.
 func (noOpRuntime) Err() <-chan error {
 	return nil
+}
+
+func NewSelector(opts ...cfg.Option[*selector.Config]) (Selector, error) {
+	return selector.New(opts...)
+}
+
+func NewBlockingSelector(opts ...cfg.Option[*selector.Config]) (Selector, error) {
+	return selector.NewBlockingSelector(opts...)
+}
+
+func NewExecutor(id string, runners []executor.Runner, opts ...cfg.Option[*executor.Executable]) (executor.Executor, error) {
+	return executor.New(id, runners, opts...)
+}
+
+func NewSchedule(opts ...cfg.Option[*schedule.CronSchedule]) (*schedule.CronSchedule, error) {
+	return schedule.New(opts...)
 }

@@ -180,13 +180,13 @@ func TestFillErrorBuffer(t *testing.T) {
 	results := make([]int, 0, 2)
 	wants := []int{1, 1}
 
-	exec, err := executor.New("test_exec", []executor.Runner{runner1},
+	exec, err := micron.NewExecutor("test_exec", []executor.Runner{runner1},
 		executor.WithSchedule("* * * * * *", time.Local),
 		executor.WithLogHandler(h),
 	)
 	is.Empty(t, err)
 
-	sel, err := selector.New(
+	sel, err := micron.NewSelector(
 		selector.WithExecutors(exec),
 		selector.WithLogHandler(h),
 	)
