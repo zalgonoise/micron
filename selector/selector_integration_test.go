@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,14 +22,14 @@ import (
 )
 
 type testRunner struct {
-	v  int
-	ch chan<- int
+	id    int
+	count atomic.Uint32
 
 	err error
 }
 
-func (r testRunner) Run(context.Context) error {
-	r.ch <- r.v
+func (r *testRunner) Run(context.Context) error {
+	r.count.Add(1)
 
 	return r.err
 }
@@ -38,9 +38,8 @@ func (r testRunner) Run(context.Context) error {
 func TestSelector(t *testing.T) {
 	h := slog.NewJSONHandler(os.Stderr, nil)
 
-	values := make(chan int)
-	runner1 := testRunner{v: 1, ch: values}
-	runner2 := testRunner{v: 2, ch: values}
+	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
 
 	everytime := "* * * * * *"
 	everytime2 := "0-59 * * * * *"
@@ -52,7 +51,7 @@ func TestSelector(t *testing.T) {
 		name    string
 		execMap map[string][]executor.Runner // cron string : runners
 		dur     time.Duration
-		wants   []int
+		wants   map[int]int
 		err     error
 	}{
 		{
@@ -61,7 +60,7 @@ func TestSelector(t *testing.T) {
 				everytime: {runner1, runner2},
 			},
 			dur:   defaultDur,
-			wants: []int{1, 1, 2, 2},
+			wants: map[int]int{1: 2, 2: 2},
 		},
 		{
 			name: "TwoExecsTwoRunners",
@@ -69,8 +68,8 @@ func TestSelector(t *testing.T) {
 				twoMinEven: {runner1},
 				twoMinOdd:  {runner2},
 			},
-			dur:   defaultDur * 2,
-			wants: []int{1, 1, 2, 2},
+			dur:   defaultDur,
+			wants: map[int]int{1: 1, 2: 1},
 		},
 		{
 			name: "TwoExecsOffsetFrequency",
@@ -79,7 +78,7 @@ func TestSelector(t *testing.T) {
 				twoMinOdd: {runner2},
 			},
 			dur:   defaultDur,
-			wants: []int{1, 1, 2},
+			wants: map[int]int{1: 2, 2: 1},
 		},
 		{
 			name: "TwoExecsSameSchedule",
@@ -88,85 +87,223 @@ func TestSelector(t *testing.T) {
 				everytime2: {runner2},
 			},
 			dur:   defaultDur,
-			wants: []int{1, 1, 2, 2},
+			wants: map[int]int{1: 2, 2: 2},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			testFunc := func(t *testing.T, withBlock bool) {
-				results := make([]int, 0, len(testcase.wants))
-				execs := make([]selector.Executor, 0, len(testcase.execMap))
+			defer func() {
+				runner1.count.Store(0)
+				runner2.count.Store(0)
+			}()
 
-				var n int
-				for cron, runners := range testcase.execMap {
-					exec, err := executor.New(fmt.Sprintf("%d", n), runners,
-						executor.WithSchedule(cron, time.Local),
-						executor.WithLogHandler(h),
-					)
-					is.Empty(t, err)
+			execs := make([]selector.Executor, 0, len(testcase.execMap))
 
-					execs = append(execs, exec)
-					n++
-				}
-
-				selectorOpts := []cfg.Option[*selector.Config]{
-					selector.WithExecutors(execs...),
-					selector.WithLogHandler(h),
-				}
-
-				var (
-					sel *selector.Selector
-					err error
+			var n int
+			for cron, runners := range testcase.execMap {
+				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
+					executor.WithSchedule(cron, time.Local),
+					executor.WithLogHandler(h),
 				)
-
-				sel, err = selector.New(selectorOpts...)
-
 				is.Empty(t, err)
 
-				ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+				execs = append(execs, exec)
+				n++
+			}
 
-				go func(t *testing.T, err error) {
-					defer cancel()
+			selectorOpts := []cfg.Option[*selector.Config]{
+				selector.WithExecutors(execs...),
+				selector.WithLogHandler(h),
+			}
 
-					for {
-						select {
-						case <-ctx.Done():
-							return
-						default:
-						}
+			var (
+				sel *selector.Selector
+				err error
+			)
 
-						selErr := sel.Next(ctx)
-						if !errors.Is(selErr, err) && !errors.Is(selErr, context.DeadlineExceeded) {
-							t.Error(selErr)
-						}
-					}
-				}(t, testcase.err)
+			sel, err = selector.New(selectorOpts...)
+
+			is.Empty(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+
+			go func(t *testing.T, err error) {
+				defer cancel()
 
 				for {
 					select {
 					case <-ctx.Done():
-						if testcase.dur < time.Second {
-							is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
-
-							return
-						}
-
-						slices.Sort(results)
-						is.EqualElements(t, testcase.wants, results)
-
 						return
-					case v := <-values:
-						results = append(results, v)
+					default:
+					}
+
+					selErr := sel.Next(ctx)
+					if !errors.Is(selErr, err) && !errors.Is(selErr, context.DeadlineExceeded) {
+						t.Error(selErr)
 					}
 				}
+			}(t, testcase.err)
+
+			for {
+				select {
+				case <-ctx.Done():
+					if testcase.dur < time.Second {
+						is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
+
+						return
+					}
+
+					results := make(map[int]int, 2)
+					results[runner1.id] = int(runner1.count.Load())
+					results[runner2.id] = int(runner2.count.Load())
+
+					for k, v := range testcase.wants {
+						res, ok := results[k]
+						is.True(t, ok)
+
+						is.Equal(t, v, res)
+					}
+
+					return
+				}
+			}
+		})
+	}
+}
+
+//nolint:gocognit // ignore cyclomatic complexity in integration tests, for its extended setup logic
+func TestBlockingSelector(t *testing.T) {
+	h := slog.NewJSONHandler(os.Stderr, nil)
+
+	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
+
+	everytime := "* * * * * *"
+	everytime2 := "0-59 * * * * *"
+	twoMinEven := "0/2 * * * * *"
+	twoMinOdd := "1/2 * * * * *"
+	defaultDur := 2010 * time.Millisecond
+
+	for _, testcase := range []struct {
+		name    string
+		execMap map[string][]executor.Runner // cron string : runners
+		dur     time.Duration
+		wants   map[int]int
+		err     error
+	}{
+		{
+			name: "SingleExecTwoRunners",
+			execMap: map[string][]executor.Runner{
+				everytime: {runner1, runner2},
+			},
+			dur:   defaultDur,
+			wants: map[int]int{1: 2, 2: 2},
+		},
+		{
+			name: "TwoExecsTwoRunners",
+			execMap: map[string][]executor.Runner{
+				twoMinEven: {runner1},
+				twoMinOdd:  {runner2},
+			},
+			dur:   defaultDur,
+			wants: map[int]int{1: 1, 2: 1},
+		},
+		{
+			name: "TwoExecsOffsetFrequency",
+			execMap: map[string][]executor.Runner{
+				everytime: {runner1},
+				twoMinOdd: {runner2},
+			},
+			dur: defaultDur,
+			// id: 2 doesn't get executed (blocked by id: 1)
+			wants: map[int]int{1: 2, 2: 0},
+		},
+		{
+			name: "TwoExecsSameSchedule",
+			execMap: map[string][]executor.Runner{
+				everytime:  {runner1},
+				everytime2: {runner2},
+			},
+			dur: defaultDur,
+			// id: 2 doesn't get executed (blocked by id: 1)
+			wants: map[int]int{1: 2, 2: 0},
+		},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			defer func() {
+				runner1.count.Store(0)
+				runner2.count.Store(0)
+			}()
+
+			execs := make([]selector.Executor, 0, len(testcase.execMap))
+
+			var n int
+			for cron, runners := range testcase.execMap {
+				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
+					executor.WithSchedule(cron, time.Local),
+					executor.WithLogHandler(h),
+				)
+				is.Empty(t, err)
+
+				execs = append(execs, exec)
+				n++
 			}
 
-			t.Run("WithBlock", func(t *testing.T) {
-				testFunc(t, true)
-			})
+			selectorOpts := []cfg.Option[*selector.Config]{
+				selector.WithExecutors(execs...),
+				selector.WithLogHandler(h),
+			}
 
-			t.Run("NonBlocking", func(t *testing.T) {
-				testFunc(t, false)
-			})
+			var (
+				sel *selector.BlockingSelector
+				err error
+			)
+
+			sel, err = selector.NewBlockingSelector(selectorOpts...)
+
+			is.Empty(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+
+			go func(t *testing.T, err error) {
+				defer cancel()
+
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+
+					selErr := sel.Next(ctx)
+					if !errors.Is(selErr, err) && !errors.Is(selErr, context.DeadlineExceeded) {
+						t.Error(selErr)
+					}
+				}
+			}(t, testcase.err)
+
+			for {
+				select {
+				case <-ctx.Done():
+					if testcase.dur < time.Second {
+						is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
+
+						return
+					}
+
+					results := make(map[int]int, 2)
+					results[runner1.id] = int(runner1.count.Load())
+					results[runner2.id] = int(runner2.count.Load())
+
+					for k, v := range testcase.wants {
+						res, ok := results[k]
+						is.True(t, ok)
+
+						is.Equal(t, v, res)
+					}
+
+					return
+				}
+			}
 		})
 	}
 }
