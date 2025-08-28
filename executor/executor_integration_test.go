@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,21 +22,21 @@ import (
 )
 
 type testRunner struct {
-	v  int
-	ch chan<- int
+	id    int
+	count atomic.Uint32
 
 	err error
 }
 
-func (r testRunner) Run(context.Context) error {
-	r.ch <- r.v
+func (r *testRunner) Run(context.Context) error {
+	r.count.Add(1)
 
 	return r.err
 }
 
-func testRunnable(ch chan<- int, value int) func(ctx context.Context) error {
+func testRunnable(atom *atomic.Uint32, value uint32) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
-		ch <- value
+		atom.Add(value)
 
 		return nil
 	}
@@ -58,14 +59,14 @@ func TestNewExecutor(t *testing.T) {
 	}{
 		{
 			name:    "DefaultID",
-			runners: []executor.Runner{testRunner{}},
+			runners: []executor.Runner{&testRunner{}},
 			opts: []cfg.Option[*executor.Executable]{
 				executor.WithSchedule(cron, time.Local),
 			},
 		},
 		{
 			name:    "CustomScheduler",
-			runners: []executor.Runner{testRunner{}},
+			runners: []executor.Runner{&testRunner{}},
 			opts: []cfg.Option[*executor.Executable]{
 				executor.WithScheduler(sched),
 			},
@@ -81,10 +82,10 @@ func TestNewExecutor(t *testing.T) {
 
 func TestExecutor(t *testing.T) {
 	testErr := errors.New("test error")
-	values := make(chan int)
-	runner1 := testRunner{v: 1, ch: values}
-	runner2 := testRunner{v: 2, ch: values}
-	runner3 := testRunner{v: 3, ch: values, err: testErr}
+	values := &atomic.Uint32{}
+	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
+	runner3 := &testRunner{id: 3, count: atomic.Uint32{}, err: testErr}
 	runnable := testRunnable(values, 4)
 
 	cron := "* * * * * *"
@@ -94,7 +95,7 @@ func TestExecutor(t *testing.T) {
 		name    string
 		dur     time.Duration
 		runners []executor.Runner
-		wants   []int
+		wants   map[int]int
 		err     error
 	}{
 		{
@@ -107,29 +108,36 @@ func TestExecutor(t *testing.T) {
 			name:    "TwoRunners",
 			dur:     defaultDur,
 			runners: []executor.Runner{runner1, runner2},
-			wants:   []int{1, 2},
+			wants:   map[int]int{1: 1, 2: 1},
 		},
 		{
 			name:    "TwoRunnersAndARunnable",
 			dur:     defaultDur,
 			runners: []executor.Runner{runner1, runner2, executor.Runnable(runnable)},
-			wants:   []int{1, 2, 4},
+			wants:   map[int]int{1: 1, 2: 1, 0: 4},
 		},
 		{
 			name:    "NilRunnable",
 			dur:     defaultDur,
 			runners: []executor.Runner{executor.Runnable(nil)},
-			wants:   []int{},
+			wants:   map[int]int{},
 		},
 		{
 			name:    "ErrorRunner",
 			dur:     defaultDur,
 			runners: []executor.Runner{runner3},
-			wants:   []int{3},
+			wants:   map[int]int{},
 			err:     testErr,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
+			defer func() {
+				values.Store(0)
+				runner1.count.Store(0)
+				runner2.count.Store(0)
+				runner3.count.Store(0)
+			}()
+
 			exec, err := executor.New(testcase.name, testcase.runners,
 				executor.WithSchedule(cron, time.Local),
 				executor.WithMetrics(metrics.NoOp()),
@@ -139,8 +147,6 @@ func TestExecutor(t *testing.T) {
 			)
 			is.Empty(t, err)
 			is.Equal(t, testcase.name, exec.ID())
-
-			results := make([]int, 0, len(testcase.wants))
 
 			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
 
@@ -164,11 +170,20 @@ func TestExecutor(t *testing.T) {
 						return
 					}
 
-					is.EqualElements(t, testcase.wants, results)
+					results := make(map[int]int, 4)
+					results[runner1.id] = int(runner1.count.Load())
+					results[runner2.id] = int(runner1.count.Load())
+					results[runner3.id] = int(runner1.count.Load())
+					results[0] = int(values.Load())
+
+					for k, v := range testcase.wants {
+						res, ok := results[k]
+						is.True(t, ok)
+
+						is.Equal(t, v, res)
+					}
 
 					return
-				case v := <-values:
-					results = append(results, v)
 				}
 			}
 		})
