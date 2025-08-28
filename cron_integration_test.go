@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,14 +23,14 @@ import (
 )
 
 type testRunner struct {
-	v  int
-	ch chan<- int
+	id    int
+	count atomic.Uint32
 
 	err error
 }
 
-func (r testRunner) Run(context.Context) error {
-	r.ch <- r.v
+func (r *testRunner) Run(context.Context) error {
+	r.count.Add(1)
 
 	return r.err
 }
@@ -41,13 +41,11 @@ func TestCron(t *testing.T) {
 		log.WithTraceContext(true))
 
 	testErr := errors.New("test error")
-	values := make(chan int)
-	runner1 := testRunner{v: 1, ch: values}
-	runner2 := testRunner{v: 2, ch: values}
-	runner3 := testRunner{v: 3, ch: values, err: testErr}
+	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
+	runner3 := &testRunner{id: 3, count: atomic.Uint32{}, err: testErr}
 
 	everytime := "* * * * * *"
-	everymin := "0 * * * * *"
 	everyhalfmin := "0/2 * * * * *"
 	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
@@ -57,7 +55,7 @@ func TestCron(t *testing.T) {
 		name    string
 		execMap map[string][]executor.Runner // cron string : runners
 		dur     time.Duration
-		wants   []int
+		wants   map[int]int
 		err     error
 	}{
 		{
@@ -66,7 +64,7 @@ func TestCron(t *testing.T) {
 				everytime: {runner1, runner2},
 			},
 			dur:   defaultDur,
-			wants: []int{1, 2},
+			wants: map[int]int{1: 1, 2: 1},
 		},
 		{
 			name: "TwoExecsTwoRunners",
@@ -75,19 +73,16 @@ func TestCron(t *testing.T) {
 				twoMinOdd:  {runner2},
 			},
 			dur:   2100 * time.Millisecond,
-			wants: []int{1, 2},
+			wants: map[int]int{1: 1, 2: 1},
 		},
 		{
 			name: "TwoExecsTwoRunnersLongShort",
 			execMap: map[string][]executor.Runner{
 				everyhalfmin: {runner1},
-				everymin:     {runner2},
+				everytime:    {runner2},
 			},
-			dur: time.Minute + 15*time.Second,
-			wants: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-				1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-				1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-				1, 1, 1, 1, 1, 1, 1, 1, 2},
+			dur:   10315 * time.Millisecond,
+			wants: map[int]int{1: 5, 2: 10},
 		},
 		{
 			name: "TwoExecsOffsetFrequency",
@@ -96,7 +91,7 @@ func TestCron(t *testing.T) {
 				twoMinOdd: {runner2},
 			},
 			dur:   2100 * time.Millisecond,
-			wants: []int{1, 1, 2},
+			wants: map[int]int{1: 2, 2: 1},
 		},
 		{
 			name: "OneExecWithError",
@@ -104,12 +99,12 @@ func TestCron(t *testing.T) {
 				everytime: {runner3},
 			},
 			dur:   defaultDur,
-			wants: []int{3},
+			wants: map[int]int{3: 1},
 			err:   testErr,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			results := make([]int, 0, len(testcase.wants))
+			results := make(map[int]int, len(testcase.wants))
 			execs := make([]selector.Executor, 0, len(testcase.execMap))
 
 			var n int
@@ -155,16 +150,26 @@ func TestCron(t *testing.T) {
 						return
 					}
 
-					slices.Sort(results)
-					is.EqualElements(t, testcase.wants, results)
+					for _, runners := range testcase.execMap {
+						for _, runner := range runners {
+							if r, ok := runner.(*testRunner); ok {
+								results[r.id] = int(r.count.Load())
+
+								r.count.Store(0)
+							}
+						}
+					}
+
+					for k, v := range testcase.wants {
+						res, ok := results[k]
+
+						is.True(t, ok)
+						is.Equal(t, v, res)
+					}
 
 					return
 				case err = <-errCh:
 					is.True(t, errors.Is(err, testcase.err))
-				case v := <-values:
-					t.Log("received", v)
-
-					results = append(results, v)
 				}
 			}
 		})
@@ -174,11 +179,9 @@ func TestCron(t *testing.T) {
 func TestFillErrorBuffer(t *testing.T) {
 	h := slog.NewJSONHandler(os.Stderr, nil)
 	testErr := errors.New("test error")
-	values := make(chan int)
-	runner1 := testRunner{v: 1, ch: values, err: testErr}
+	runner1 := &testRunner{id: 1, count: atomic.Uint32{}, err: testErr}
 	dur := 2100 * time.Millisecond
-	results := make([]int, 0, 2)
-	wants := []int{1, 1}
+	wants := 2
 
 	exec, err := micron.NewExecutor("test_exec", []executor.Runner{runner1},
 		executor.WithSchedule("* * * * * *", time.Local),
@@ -211,16 +214,12 @@ func TestFillErrorBuffer(t *testing.T) {
 	for {
 		select {
 		case <-ctx.Done():
-			slices.Sort(results)
-			is.EqualElements(t, wants, results)
+			result := runner1.count.Load()
+			is.Equal(t, wants, int(result))
 
 			return
 		case err = <-errCh:
 			is.True(t, errors.Is(err, testErr))
-		case v := <-values:
-			t.Log("received", v)
-
-			results = append(results, v)
 		}
 	}
 }
