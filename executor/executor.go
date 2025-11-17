@@ -137,8 +137,17 @@ func JoinSchedules(execs []*Executable) map[*cronlex.Schedule][]*Executable {
 	return m
 }
 
-func IsReboot(e *Executable) bool {
-	if e == nil {
+func IsReboot(exec interface {
+	Exec(ctx context.Context, now time.Time) error
+	Next(ctx context.Context, now time.Time) time.Duration
+	ID() string
+}) bool {
+	if exec == nil {
+		return false
+	}
+
+	e, ok := exec.(*Executable)
+	if !ok {
 		return false
 	}
 
@@ -146,7 +155,7 @@ func IsReboot(e *Executable) bool {
 		return false
 	}
 
-	_, ok := e.cron.(*schedule.RebootSchedule)
+	_, ok = e.cron.(*schedule.RebootSchedule)
 
 	return ok
 }
