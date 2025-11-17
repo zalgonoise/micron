@@ -25,6 +25,7 @@ type Config struct {
 
 func defaultConfig() *Config {
 	return &Config{
+		timeout: defaultTimeout,
 		clock:   NewClock(),
 		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
@@ -71,7 +72,7 @@ func WithExecutors(executors ...Executor) cfg.Option[*Config] {
 // cfg.Option being returned.
 func WithTimeout(dur time.Duration) cfg.Option[*Config] {
 	if dur <= 0 {
-		return cfg.NoOp[*Config]{}
+		dur = defaultTimeout
 	}
 
 	return cfg.Register(func(config *Config) *Config {

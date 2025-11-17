@@ -2,18 +2,20 @@ package selector
 
 import (
 	"context"
+	"errors"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/zalgonoise/cfg"
+	"github.com/zalgonoise/micron/v3/executor"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type BlockingSelector struct {
-	exec  []Executor
-	clock Clock
+	exec        []*executor.Executable
+	rebootExecs []*executor.Executable
+	clock       Clock
 
 	logger  *slog.Logger
 	metrics Metrics
@@ -27,13 +29,25 @@ func NewBlockingSelector(options ...cfg.Option[*Config]) (*BlockingSelector, err
 		return nil, ErrEmptyExecutorsList
 	}
 
-	return &BlockingSelector{
-		exec:    config.exec,
-		clock:   config.clock,
-		logger:  config.logger,
-		metrics: config.metrics,
-		tracer:  config.tracer,
-	}, nil
+	execs, rebootExecs := JoinSchedules(config.exec)
+
+	s := &BlockingSelector{
+		exec:        execs,
+		rebootExecs: rebootExecs,
+		clock:       config.clock,
+		logger:      config.logger,
+		metrics:     config.metrics,
+		tracer:      config.tracer,
+	}
+
+	if len(rebootExecs) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), config.timeout)
+		defer cancel()
+
+		s.runRebootExecs(ctx)
+	}
+
+	return s, nil
 }
 
 // Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
@@ -66,13 +80,28 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	case 0:
 		err = ErrEmptyExecutorsList
 	case 1:
+		s.metrics.IncSelectorSelectCalls(ctx)
+
 		err = s.exec[0].Exec(ctx, now)
 	default:
-		err = s.next(ctx, now)[0].Exec(ctx, now)
+		s.metrics.IncSelectorSelectCalls(ctx)
+
+		execs := s.next(ctx, now)
+
+		errs := make([]error, 0, len(execs))
+		for _, e := range execs {
+			if err := e.Exec(ctx, now); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			err = errors.Join(errs...)
+		}
 	}
 
 	if err != nil {
-		s.metrics.IncSelectorSelectCalls(ctx)
+		s.metrics.IncSelectorSelectErrors(ctx)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		s.logger.ErrorContext(ctx, "no tasks configured for execution",
@@ -85,22 +114,69 @@ func (s *BlockingSelector) Next(ctx context.Context) error {
 	return nil
 }
 
-func (s *BlockingSelector) next(ctx context.Context, now time.Time) []Executor {
-	slices.SortFunc(s.exec, func(a, b Executor) int {
-		return a.Next(ctx, now).Compare(b.Next(ctx, now))
-	})
+func (s *BlockingSelector) Error() error { return nil }
 
-	if s.logger.Enabled(ctx, slog.LevelDebug) {
-		times := make(map[string]string, len(s.exec))
+func (s *BlockingSelector) Stop() error { return nil }
 
-		for i := range s.exec {
-			times[s.exec[i].ID()] = s.exec[i].Next(ctx, now).Format(time.RFC3339)
-		}
-
-		s.logger.DebugContext(ctx, "selecting the next task",
-			slog.Any("times", times),
-		)
+func (s *BlockingSelector) next(ctx context.Context, now time.Time) []*executor.Executable {
+	if len(s.exec) == 0 {
+		return nil
 	}
 
-	return s.exec
+	var (
+		shortest time.Duration
+		execs    = make([]*executor.Executable, 0, len(s.exec))
+	)
+
+	for _, e := range s.exec {
+		next := e.Next(ctx, now)
+
+		switch {
+		case next < 0:
+			continue
+		case next == shortest:
+			execs = append(execs, e)
+		case shortest == 0, next < shortest:
+			shortest = next
+			execs = make([]*executor.Executable, 0, len(s.exec))
+			execs = append(execs, e)
+		}
+	}
+
+	return execs
+}
+
+func (s *BlockingSelector) runRebootExecs(ctx context.Context) {
+	ctx, span := s.tracer.Start(ctx, "BlockingSelector.runRebootExecs")
+	defer span.End()
+
+	s.metrics.IncSelectorSelectCalls(ctx)
+
+	var (
+		errs = make([]error, 0, len(s.rebootExecs))
+		now  = s.clock.Now()
+	)
+
+	s.logger.InfoContext(ctx, "running reboot executors")
+
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		for _, e := range s.rebootExecs {
+			if err := e.Exec(ctx, now); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			err := errors.Join(errs...)
+
+			s.metrics.IncSelectorSelectErrors(ctx)
+			s.logger.ErrorContext(ctx, "executing reboot tasks",
+				slog.String("errors", err.Error()))
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+		}
+	}
 }

@@ -2,11 +2,14 @@ package selector
 
 import (
 	"context"
-	"iter"
+	"errors"
+	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/zalgonoise/cfg"
+	"github.com/zalgonoise/micron/v3/executor"
 	"github.com/zalgonoise/x/errs"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -48,7 +51,7 @@ type Executor interface {
 	// of this call.
 	Exec(ctx context.Context, now time.Time) error
 	// Next calls the Executor's underlying schedule.Scheduler Next method.
-	Next(ctx context.Context, now time.Time) time.Time
+	Next(ctx context.Context, now time.Time) time.Duration
 	// ID returns this Executor's ID.
 	ID() string
 }
@@ -67,7 +70,10 @@ type Metrics interface {
 
 type Selector struct {
 	timeout time.Duration
-	exec    []Executor
+	exec    []*executor.Executable
+	errChan chan error
+	err     *atomic.Pointer[error]
+	cancel  context.CancelFunc
 	clock   Clock
 
 	logger  *slog.Logger
@@ -79,7 +85,7 @@ type Selector struct {
 //
 // Creating a Selector requires at least one executor.Executor, which can be added through the WithExecutors option. To
 // allow this configuration to be variadic as well, it is served as a cfg.Option.
-func New(options ...cfg.Option[*Config]) (*Selector, error) {
+func New(ctx context.Context, options ...cfg.Option[*Config]) (*Selector, error) {
 	config := cfg.Set(defaultConfig(), options...)
 
 	if len(config.exec) == 0 {
@@ -90,115 +96,195 @@ func New(options ...cfg.Option[*Config]) (*Selector, error) {
 		config.timeout = defaultTimeout
 	}
 
-	return &Selector{
+	errChan := make(chan error)
+	execs, rebootExecs := JoinSchedules(config.exec)
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	s := &Selector{
 		timeout: config.timeout,
-		exec:    config.exec,
+		exec:    execs,
+		errChan: errChan,
+		err:     &atomic.Pointer[error]{},
+		cancel:  cancel,
 		clock:   config.clock,
 		logger:  config.logger,
 		metrics: config.metrics,
 		tracer:  config.tracer,
-	}, nil
+	}
+
+	go func() {
+		s.logger.InfoContext(ctx, "goroutine")
+
+		if err := s.scanExecs(ctx, execs); err != nil {
+			s.errChan <- err
+		}
+	}()
+
+	go s.asyncExec(ctx, rebootExecs)
+
+	go s.consumeErrors(ctx)
+
+	return s, nil
 }
 
-// Next picks up the following scheduled job to execute from its configured (set of) executor.Executor, and
-// calls its Exec method.
+// Next complies with the common selector interface, which would run a (set of) executors and return an error if raised.
 //
-// This call also imposes a minimum step duration of 50ms, to ensure that early-runs are not executed twice due to the
-// nature of using clocks in Go. This sleep is deferred to come in after the actual execution of the job.
+// In an async approach, this method call will simply wait for the configured timeout duration and return the error(s)
+// collected by its Selector.Error method call.
 //
-// The Selector allows multiple executor.Executor to be configured, and multiple executor.Executor can share similar
-// execution times. If that is the case, the executor is launched in an executor.Multi call.
-//
-// The error returned from a Next call is the error raised by the executor.Executor's Exec call.
+// Callers of Selector.Next should consider to use Selector.Error directly, instead.
 func (s *Selector) Next(ctx context.Context) error {
-	ctx, span := s.tracer.Start(ctx, "Selector.Select")
+	timer := time.NewTimer(s.timeout)
+
+	select {
+	case <-ctx.Done():
+		s.cancel()
+
+		return nil
+	case <-timer.C:
+		return s.Error()
+	}
+}
+
+// Error will return any stored errors in the Selector, with a swap-with-nil approach, resetting the errors
+// stored in the Selector.
+//
+// Errors are collected asynchronously and joined.
+func (s *Selector) Error() error {
+	stored := s.err.Swap(nil)
+	if stored != nil && *stored != nil {
+		return *stored
+	}
+
+	return nil
+}
+
+// Stop interrupts the (asnyc) Selector's runtime.
+func (s *Selector) Stop() error {
+	s.cancel()
+
+	return s.Error()
+}
+
+func (s *Selector) scanExecs(ctx context.Context, e []*executor.Executable) error {
+	if len(e) == 0 {
+		return nil
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			s.asyncExec(ctx, e)
+		}
+	}
+}
+
+func (s *Selector) asyncExec(ctx context.Context, e []*executor.Executable) {
+	ctx, span := s.tracer.Start(ctx, "Selector.asyncExec")
 	defer span.End()
 
 	s.metrics.IncSelectorSelectCalls(ctx)
-	s.logger.InfoContext(ctx, "selecting the next task")
 
-	// minStepDuration ensures that each execution is locked to the seconds mark and
-	// a runner is not executed more than once per trigger.
-	defer time.Sleep(minStepDuration)
-
-	localCtx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-
-	errCh := make(chan error)
 	now := s.clock.Now()
 
-	switch len(s.exec) {
-	case 0:
-		s.metrics.IncSelectorSelectCalls(ctx)
-		span.SetStatus(codes.Error, ErrEmptyExecutorsList.Error())
-		span.RecordError(ErrEmptyExecutorsList)
-		s.logger.ErrorContext(ctx, "no tasks configured for execution",
-			slog.String("error", ErrEmptyExecutorsList.Error()),
-		)
-
-		close(errCh)
-
-		return ErrEmptyExecutorsList
-	case 1:
-		go func() {
-			if err := s.exec[0].Exec(ctx, now); err != nil {
-				errCh <- err
-			}
-
-			close(errCh)
-		}()
-	default:
-		s.next(ctx, now)(func(duration time.Duration, e Executor) bool {
-			s.logger.DebugContext(ctx, "checking task to execute",
-				slog.String("eta", duration.String()),
-				slog.String("id", e.ID()),
-			)
-
-			if duration < minStepDuration {
-				go func() {
-					if err := e.Exec(ctx, now); err != nil {
-						errCh <- err
-					}
-				}()
-			}
-
-			return true
-		})
-
-		close(errCh)
-	}
-
 	select {
-	case <-localCtx.Done():
-		return nil
-	case err, ok := <-errCh:
-		if !ok {
-			return nil
+	case <-ctx.Done():
+		return
+	default:
+		s.logger.InfoContext(ctx, "selecting the next task")
+		errExecs := make([]error, 0, len(e))
+
+		for i := range e {
+			// skip and remove nil executors
+			if e[i] == nil {
+				e = append(e[:i], e[i+1:]...)
+
+				continue
+			}
+
+			if err := e[i].Exec(ctx, now); err != nil {
+				err = fmt.Errorf("%s: %w", e[i].ID(), err)
+
+				// join errors on a set of executor.Exec calls
+				errExecs = append(errExecs, err)
+			}
+
+			// remove reboot executors after the first run
+			if executor.IsReboot(e[i]) {
+				e = append(e[:i], e[i+1:]...)
+			}
 		}
 
-		if err == nil {
-			return nil
+		// if there are errors, register them and send them to the error channel
+		if len(errExecs) > 0 {
+			err := errors.Join(errExecs...)
+			s.errChan <- err
+
+			s.metrics.IncSelectorSelectErrors(ctx)
+			s.logger.ErrorContext(ctx, "executing next task asynchronously",
+				slog.String("errors", err.Error()))
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
 		}
 
-		s.metrics.IncSelectorSelectCalls(ctx)
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-		s.logger.ErrorContext(ctx, "failed to select and execute the next task",
-			slog.String("error", err.Error()),
-		)
-
-		return err
+		// if there are no other executors, return early
+		if len(e) == 0 {
+			return
+		}
 	}
 }
 
-func (s *Selector) next(ctx context.Context, now time.Time) iter.Seq2[time.Duration, Executor] {
-	return func(yield func(dur time.Duration, exec Executor) bool) {
-		for i := range s.exec {
-			if !yield(s.exec[i].Next(ctx, now).Sub(now), s.exec[i]) {
+func (s *Selector) consumeErrors(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-s.errChan:
+			if !ok {
 				return
 			}
+
+			s.storeError(err)
 		}
 	}
+}
+
+func (s *Selector) storeError(err error) {
+	if err == nil {
+		return
+	}
+
+	stored := s.err.Load()
+	if stored == nil || *stored == nil {
+		s.err.Store(&err)
+
+		return
+	}
+
+	joined := errors.Join(*stored, err)
+	s.err.Store(&joined)
+}
+
+func JoinSchedules(execs []Executor) ([]*executor.Executable, []*executor.Executable) {
+	m := make([]*executor.Executable, 0, len(execs))
+	r := make([]*executor.Executable, 0, len(execs))
+
+	for i := range execs {
+		if e, ok := execs[i].(*executor.Executable); ok && e != nil {
+			if executor.IsReboot(e) {
+				r = append(r, e)
+
+				continue
+			}
+
+			m = append(m, e)
+		}
+	}
+
+	return m, r
 }
 
 // NoOp returns a no-op Selector.

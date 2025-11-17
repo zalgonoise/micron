@@ -175,12 +175,14 @@ func TestWithObservability(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
+			ctx := context.Background()
+
 			exec, err := executor.New("test", []executor.Runner{testcase.runner},
 				executor.WithSchedule(cron, time.Local),
 			)
 			is.Empty(t, err)
 
-			sel, err := New(
+			sel, err := New(ctx,
 				WithExecutors(exec),
 				WithLogHandler(log.NoOp()),
 				WithLogger(slog.New(log.NoOp())),
@@ -189,7 +191,7 @@ func TestWithObservability(t *testing.T) {
 			)
 			is.Empty(t, err)
 
-			err = sel.Next(context.Background())
+			err = sel.Next(ctx)
 			is.True(t, errors.Is(err, testcase.err))
 		})
 	}
@@ -220,7 +222,7 @@ func TestZeroExecutors(t *testing.T) {
 	})
 
 	t.Run("FromConstructor", func(t *testing.T) {
-		_, err := New()
+		_, err := New(context.Background())
 		is.True(t, errors.Is(ErrEmptyExecutorsList, err))
 	})
 }

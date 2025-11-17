@@ -5,7 +5,6 @@ package selector_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"sync/atomic"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	"github.com/zalgonoise/cfg"
+	"github.com/zalgonoise/micron/v3"
+	"github.com/zalgonoise/micron/v3/log"
 	"github.com/zalgonoise/x/is"
 	"go.opentelemetry.io/otel/trace/noop"
 
@@ -23,7 +24,7 @@ import (
 
 type testRunner struct {
 	id    int
-	count atomic.Uint32
+	count *atomic.Uint32
 
 	err error
 }
@@ -36,16 +37,20 @@ func (r *testRunner) Run(context.Context) error {
 
 //nolint:gocognit // ignore cyclomatic complexity in integration tests, for its extended setup logic
 func TestSelector(t *testing.T) {
-	h := slog.NewJSONHandler(os.Stderr, nil)
+	logger := log.New(nil, log.AsJSON(), log.WithLevel(slog.LevelDebug))
 
-	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
-	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
+	runner1 := &testRunner{id: 1, count: &atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: &atomic.Uint32{}}
+	runnerReboot := &testRunner{id: 3, count: &atomic.Uint32{}}
 
+	reboot := "@reboot"
 	everytime := "* * * * * *"
 	everytime2 := "0-59 * * * * *"
-	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
-	defaultDur := 2010 * time.Millisecond
+
+	twoSecEven := "0/2 * * * * *"
+	twoSecOdd := "1/2 * * * * *"
+	defaultDur := 2030 * time.Millisecond
 
 	for _, testcase := range []struct {
 		name    string
@@ -65,11 +70,11 @@ func TestSelector(t *testing.T) {
 		{
 			name: "TwoExecsTwoRunners",
 			execMap: map[string][]executor.Runner{
-				twoMinEven: {runner1},
-				twoMinOdd:  {runner2},
+				twoSecEven: {runner1},
+				twoSecOdd:  {runner2},
 			},
-			dur:   defaultDur,
-			wants: map[int]int{1: 1, 2: 1},
+			dur:   2 * defaultDur,
+			wants: map[int]int{1: 2, 2: 2},
 		},
 		{
 			name: "TwoExecsOffsetFrequency",
@@ -89,20 +94,29 @@ func TestSelector(t *testing.T) {
 			dur:   defaultDur,
 			wants: map[int]int{1: 2, 2: 2},
 		},
+		{
+			name: "TwoExecsEverytimeAndReboot",
+			execMap: map[string][]executor.Runner{
+				everytime: {runner1},
+				reboot:    {runnerReboot},
+			},
+			dur:   defaultDur,
+			wants: map[int]int{1: 2, 3: 1},
+		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			defer func() {
-				runner1.count.Store(0)
-				runner2.count.Store(0)
-			}()
+			runner1.count.Store(0)
+			runner2.count.Store(0)
+			runnerReboot.count.Store(0)
 
 			execs := make([]selector.Executor, 0, len(testcase.execMap))
 
 			var n int
 			for cron, runners := range testcase.execMap {
-				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
+				exec, err := executor.New(cron, runners,
 					executor.WithSchedule(cron, time.Local),
-					executor.WithLogHandler(h),
+					executor.WithLogger(logger),
+					executor.WithTimeout(30*time.Second),
 				)
 				is.Empty(t, err)
 
@@ -112,7 +126,8 @@ func TestSelector(t *testing.T) {
 
 			selectorOpts := []cfg.Option[*selector.Config]{
 				selector.WithExecutors(execs...),
-				selector.WithLogHandler(h),
+				selector.WithLogger(logger),
+				selector.WithTimeout(30 * time.Second),
 			}
 
 			var (
@@ -120,51 +135,41 @@ func TestSelector(t *testing.T) {
 				err error
 			)
 
-			sel, err = selector.New(selectorOpts...)
+			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+			defer cancel()
 
+			sel, err = selector.New(ctx, selectorOpts...)
 			is.Empty(t, err)
 
-			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+			c, err := micron.New(
+				micron.WithSelector(sel),
+				micron.WithLogger(logger))
+			is.Empty(t, err)
 
-			go func(t *testing.T, err error) {
-				defer cancel()
+			// try to stick to zero seconds in tests as much as possible
+			start := time.Now().Truncate(time.Second).Add(990 * time.Millisecond)
+			t.Log("start: ", start.Format(time.RFC3339))
+			time.Sleep(time.Until(start))
 
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
+			c.Run(ctx)
 
-					selErr := sel.Next(ctx)
-					if !errors.Is(selErr, err) && !errors.Is(selErr, context.DeadlineExceeded) {
-						t.Error(selErr)
-					}
-				}
-			}(t, testcase.err)
+			<-ctx.Done()
+			if testcase.dur < time.Second {
+				is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
 
-			for {
-				select {
-				case <-ctx.Done():
-					if testcase.dur < time.Second {
-						is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
+				return
+			}
 
-						return
-					}
+			results := make(map[int]int, 3)
+			results[runner1.id] = int(runner1.count.Load())
+			results[runner2.id] = int(runner2.count.Load())
+			results[runnerReboot.id] = int(runnerReboot.count.Load())
 
-					results := make(map[int]int, 2)
-					results[runner1.id] = int(runner1.count.Load())
-					results[runner2.id] = int(runner2.count.Load())
+			for k, v := range testcase.wants {
+				res, ok := results[k]
+				is.True(t, ok)
 
-					for k, v := range testcase.wants {
-						res, ok := results[k]
-						is.True(t, ok)
-
-						is.Equal(t, v, res)
-					}
-
-					return
-				}
+				is.Equal(t, v, res)
 			}
 		})
 	}
@@ -172,16 +177,20 @@ func TestSelector(t *testing.T) {
 
 //nolint:gocognit // ignore cyclomatic complexity in integration tests, for its extended setup logic
 func TestBlockingSelector(t *testing.T) {
-	h := slog.NewJSONHandler(os.Stderr, nil)
+	logger := log.New(nil, log.AsJSON(), log.WithLevel(slog.LevelDebug))
 
-	runner1 := &testRunner{id: 1, count: atomic.Uint32{}}
-	runner2 := &testRunner{id: 2, count: atomic.Uint32{}}
+	runner1 := &testRunner{id: 1, count: &atomic.Uint32{}}
+	runner2 := &testRunner{id: 2, count: &atomic.Uint32{}}
+	runnerReboot := &testRunner{id: 3, count: &atomic.Uint32{}}
 
+	reboot := "@reboot"
 	everytime := "* * * * * *"
 	everytime2 := "0-59 * * * * *"
-	twoMinEven := "0/2 * * * * *"
 	twoMinOdd := "1/2 * * * * *"
-	defaultDur := 2010 * time.Millisecond
+
+	twoSecEven := "0/2 * * * * *"
+	twoSecOdd := "1/2 * * * * *"
+	defaultDur := 2030 * time.Millisecond
 
 	for _, testcase := range []struct {
 		name    string
@@ -201,11 +210,11 @@ func TestBlockingSelector(t *testing.T) {
 		{
 			name: "TwoExecsTwoRunners",
 			execMap: map[string][]executor.Runner{
-				twoMinEven: {runner1},
-				twoMinOdd:  {runner2},
+				twoSecEven: {runner1},
+				twoSecOdd:  {runner2},
 			},
-			dur:   defaultDur,
-			wants: map[int]int{1: 1, 2: 1},
+			dur:   2 * defaultDur,
+			wants: map[int]int{1: 2, 2: 2},
 		},
 		{
 			name: "TwoExecsOffsetFrequency",
@@ -213,9 +222,8 @@ func TestBlockingSelector(t *testing.T) {
 				everytime: {runner1},
 				twoMinOdd: {runner2},
 			},
-			dur: defaultDur,
-			// id: 2 doesn't get executed (blocked by id: 1)
-			wants: map[int]int{1: 2, 2: 0},
+			dur:   2 * defaultDur,
+			wants: map[int]int{1: 2, 2: 1},
 		},
 		{
 			name: "TwoExecsSameSchedule",
@@ -223,24 +231,32 @@ func TestBlockingSelector(t *testing.T) {
 				everytime:  {runner1},
 				everytime2: {runner2},
 			},
-			dur: defaultDur,
-			// id: 2 doesn't get executed (blocked by id: 1)
-			wants: map[int]int{1: 2, 2: 0},
+			dur:   defaultDur,
+			wants: map[int]int{1: 2, 2: 2},
+		},
+		{
+			name: "TwoExecsEverytimeAndReboot",
+			execMap: map[string][]executor.Runner{
+				everytime: {runner1},
+				reboot:    {runnerReboot},
+			},
+			dur:   2 * defaultDur,
+			wants: map[int]int{1: 2, 3: 1},
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			defer func() {
-				runner1.count.Store(0)
-				runner2.count.Store(0)
-			}()
+			runner1.count.Store(0)
+			runner2.count.Store(0)
+			runnerReboot.count.Store(0)
 
 			execs := make([]selector.Executor, 0, len(testcase.execMap))
 
 			var n int
 			for cron, runners := range testcase.execMap {
-				exec, err := executor.New(fmt.Sprintf("%d", n), runners,
+				exec, err := executor.New(cron, runners,
 					executor.WithSchedule(cron, time.Local),
-					executor.WithLogHandler(h),
+					executor.WithLogger(logger),
+					executor.WithTimeout(30*time.Second),
 				)
 				is.Empty(t, err)
 
@@ -250,7 +266,8 @@ func TestBlockingSelector(t *testing.T) {
 
 			selectorOpts := []cfg.Option[*selector.Config]{
 				selector.WithExecutors(execs...),
-				selector.WithLogHandler(h),
+				selector.WithLogger(logger),
+				selector.WithTimeout(30 * time.Second),
 			}
 
 			var (
@@ -258,51 +275,41 @@ func TestBlockingSelector(t *testing.T) {
 				err error
 			)
 
-			sel, err = selector.NewBlockingSelector(selectorOpts...)
+			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+			defer cancel()
 
+			sel, err = selector.NewBlockingSelector(selectorOpts...)
 			is.Empty(t, err)
 
-			ctx, cancel := context.WithTimeout(context.Background(), testcase.dur)
+			c, err := micron.New(
+				micron.WithSelector(sel),
+				micron.WithLogger(logger))
+			is.Empty(t, err)
 
-			go func(t *testing.T, err error) {
-				defer cancel()
+			// try to stick to zero seconds in tests as much as possible
+			start := time.Now().Truncate(time.Second).Add(990 * time.Millisecond)
+			t.Log("start: ", start.Format(time.RFC3339))
+			time.Sleep(time.Until(start))
 
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
+			c.Run(ctx)
 
-					selErr := sel.Next(ctx)
-					if !errors.Is(selErr, err) && !errors.Is(selErr, context.DeadlineExceeded) {
-						t.Error(selErr)
-					}
-				}
-			}(t, testcase.err)
+			<-ctx.Done()
+			if testcase.dur < time.Second {
+				is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
 
-			for {
-				select {
-				case <-ctx.Done():
-					if testcase.dur < time.Second {
-						is.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded))
+				return
+			}
 
-						return
-					}
+			results := make(map[int]int, 3)
+			results[runner1.id] = int(runner1.count.Load())
+			results[runner2.id] = int(runner2.count.Load())
+			results[runnerReboot.id] = int(runnerReboot.count.Load())
 
-					results := make(map[int]int, 2)
-					results[runner1.id] = int(runner1.count.Load())
-					results[runner2.id] = int(runner2.count.Load())
+			for k, v := range testcase.wants {
+				res, ok := results[k]
+				is.True(t, ok)
 
-					for k, v := range testcase.wants {
-						res, ok := results[k]
-						is.True(t, ok)
-
-						is.Equal(t, v, res)
-					}
-
-					return
-				}
+				is.Equal(t, v, res)
 			}
 		})
 	}
@@ -313,12 +320,9 @@ func TestNonBlocking(t *testing.T) {
 	h := slog.NewJSONHandler(os.Stderr, nil)
 	testErr := errors.New("test error")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	exec, err := executor.New("test", []executor.Runner{
 		executor.Runnable(func(ctx context.Context) error {
-			<-time.After(100 * time.Millisecond)
+			<-time.After(50 * time.Millisecond)
 
 			return testErr
 		})},
@@ -327,30 +331,20 @@ func TestNonBlocking(t *testing.T) {
 	)
 	is.Empty(t, err)
 
-	sel, err := selector.New(
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	sel, err := selector.New(ctx,
 		selector.WithExecutors(exec),
 		selector.WithLogHandler(h),
 		selector.WithMetrics(metrics.NoOp()),
 		selector.WithTrace(noop.NewTracerProvider().Tracer("test")),
-		selector.WithTimeout(70*time.Millisecond),
+		selector.WithTimeout(100*time.Millisecond),
 	)
 	is.Empty(t, err)
 
-	errCh := make(chan error)
+	c, err := micron.New(micron.WithSelector(sel))
+	is.Empty(t, err)
 
-	go func() {
-		errCh <- sel.Next(ctx)
-	}()
-
-	select {
-	case <-ctx.Done():
-		t.Error("context timeout with no error return")
-
-		return
-	case err = <-errCh:
-		// error must be empty on this channel, but should be logged from the goroutine shortly after
-		is.Empty(t, err)
-	}
-
-	<-ctx.Done()
+	c.Run(ctx)
 }
