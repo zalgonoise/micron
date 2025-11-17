@@ -1,6 +1,7 @@
 package cronlex
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,6 +34,10 @@ const (
 	annually
 )
 
+var (
+	ErrRebootException = errors.New("reboot exception")
+)
+
 // Resolver describes the capabilities of a cron schedule resolver.
 //
 // Implementations of Resolver should focus on calculating the difference until the
@@ -60,6 +65,14 @@ type Schedule struct {
 	DayMonth Resolver
 	Month    Resolver
 	DayWeek  Resolver
+}
+
+func Equal(a, b Schedule) bool {
+	return resolve.EqualResolver(a.Sec, b.Sec) &&
+		resolve.EqualResolver(a.Min, b.Min) &&
+		resolve.EqualResolver(a.Hour, b.Hour) &&
+		resolve.EqualResolver(a.DayMonth, b.DayMonth) &&
+		resolve.EqualResolver(a.DayWeek, b.DayWeek)
 }
 
 // Parse consumes the input cron string and creates a Schedule from it, also returning an error if raised.
@@ -91,7 +104,7 @@ func ProcessFunc(t *parse.Tree[Token, byte]) (*Schedule, error) {
 
 	switch len(nodes) {
 	case override:
-		return buildException(nodes[0]), nil
+		return buildException(nodes[0])
 	case noSeconds:
 		s = &Schedule{
 			Sec: resolve.FixedSchedule{
@@ -199,16 +212,15 @@ func defaultSchedule() *Schedule {
 	}
 }
 
-func buildException(node *parse.Node[Token, byte]) *Schedule {
+func buildException(node *parse.Node[Token, byte]) (*Schedule, error) {
 	if node.Type != TokenAt {
-		return defaultSchedule()
+		return defaultSchedule(), nil
 	}
 
 	value := getValue(node.Edges[0], exceptionsList)
 	switch value {
-	// TODO: implement reboot (case 0:)
 	case reboot:
-		return defaultSchedule()
+		return nil, ErrRebootException
 	case daily:
 		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
@@ -217,7 +229,7 @@ func buildException(node *parse.Node[Token, byte]) *Schedule {
 			DayMonth: resolve.Everytime{},
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
-		}
+		}, nil
 	case weekly:
 		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
@@ -229,7 +241,7 @@ func buildException(node *parse.Node[Token, byte]) *Schedule {
 				Max: maxWeekday,
 				At:  0,
 			},
-		}
+		}, nil
 	case monthly:
 		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
@@ -238,7 +250,7 @@ func buildException(node *parse.Node[Token, byte]) *Schedule {
 			DayMonth: resolve.FixedSchedule{Max: maxDay, At: 1},
 			Month:    resolve.Everytime{},
 			DayWeek:  resolve.Everytime{},
-		}
+		}, nil
 	case yearly, annually:
 		return &Schedule{
 			Sec:      resolve.FixedSchedule{Max: maxSec, At: 0},
@@ -247,10 +259,10 @@ func buildException(node *parse.Node[Token, byte]) *Schedule {
 			DayMonth: resolve.FixedSchedule{Max: maxDay, At: 1},
 			Month:    resolve.FixedSchedule{Max: maxMonth, At: 1},
 			DayWeek:  resolve.Everytime{},
-		}
+		}, nil
 	default:
 		// case 1 -- set as default behavior
-		return defaultSchedule()
+		return defaultSchedule(), nil
 	}
 }
 

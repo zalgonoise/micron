@@ -334,17 +334,7 @@ func TestParser(t *testing.T) {
 		{
 			name:  "Success/Overrides/reboot",
 			input: "@reboot",
-			wants: &Schedule{
-				Sec: resolve.FixedSchedule{Max: 59, At: 0},
-				Min: resolve.FixedSchedule{
-					Max: 59,
-					At:  0,
-				},
-				Hour:     resolve.Everytime{},
-				DayMonth: resolve.Everytime{},
-				Month:    resolve.Everytime{},
-				DayWeek:  resolve.Everytime{},
-			},
+			err:   ErrRebootException,
 		},
 		{
 			name:  "Success/Overrides/hourly",
@@ -589,7 +579,8 @@ func FuzzParse(f *testing.F) {
 			errors.Is(err, ErrInvalidNumEdges), errors.Is(err, ErrInvalidFrequency),
 			errors.Is(err, ErrUnsupportedAlphanum), errors.Is(err, ErrOutOfBoundsAlphanum),
 			errors.Is(err, ErrEmptyAlphanum), errors.Is(err, ErrInvalidAlphanum),
-			errors.Is(err, ErrInvalidCharacter), errors.Is(err, ErrEmptyInput):
+			errors.Is(err, ErrInvalidCharacter), errors.Is(err, ErrEmptyInput),
+			errors.Is(err, ErrRebootException):
 		default:
 			t.Errorf("unexpected error: %v -- input: %q", err, s)
 		}
