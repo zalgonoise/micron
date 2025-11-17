@@ -70,7 +70,7 @@ type Metrics interface {
 
 type Selector struct {
 	timeout time.Duration
-	exec    []*executor.Executable
+	exec    []Executor
 	errChan chan error
 	err     *atomic.Pointer[error]
 	cancel  context.CancelFunc
@@ -167,7 +167,7 @@ func (s *Selector) Stop() error {
 	return s.Error()
 }
 
-func (s *Selector) scanExecs(ctx context.Context, e []*executor.Executable) error {
+func (s *Selector) scanExecs(ctx context.Context, e []Executor) error {
 	if len(e) == 0 {
 		return nil
 	}
@@ -182,7 +182,7 @@ func (s *Selector) scanExecs(ctx context.Context, e []*executor.Executable) erro
 	}
 }
 
-func (s *Selector) asyncExec(ctx context.Context, e []*executor.Executable) {
+func (s *Selector) asyncExec(ctx context.Context, e []Executor) {
 	ctx, span := s.tracer.Start(ctx, "Selector.asyncExec")
 	defer span.End()
 
@@ -268,9 +268,9 @@ func (s *Selector) storeError(err error) {
 	s.err.Store(&joined)
 }
 
-func JoinSchedules(execs []Executor) ([]*executor.Executable, []*executor.Executable) {
-	m := make([]*executor.Executable, 0, len(execs))
-	r := make([]*executor.Executable, 0, len(execs))
+func JoinSchedules(execs []Executor) ([]Executor, []Executor) {
+	m := make([]Executor, 0, len(execs))
+	r := make([]Executor, 0, len(execs))
 
 	for i := range execs {
 		if e, ok := execs[i].(*executor.Executable); ok && e != nil {

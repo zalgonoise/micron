@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/zalgonoise/cfg"
-	"github.com/zalgonoise/micron/v3/executor"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type BlockingSelector struct {
-	exec        []*executor.Executable
-	rebootExecs []*executor.Executable
+	exec        []Executor
+	rebootExecs []Executor
 	clock       Clock
 
 	logger  *slog.Logger
@@ -118,14 +117,14 @@ func (s *BlockingSelector) Error() error { return nil }
 
 func (s *BlockingSelector) Stop() error { return nil }
 
-func (s *BlockingSelector) next(ctx context.Context, now time.Time) []*executor.Executable {
+func (s *BlockingSelector) next(ctx context.Context, now time.Time) []Executor {
 	if len(s.exec) == 0 {
 		return nil
 	}
 
 	var (
 		shortest time.Duration
-		execs    = make([]*executor.Executable, 0, len(s.exec))
+		execs    = make([]Executor, 0, len(s.exec))
 	)
 
 	for _, e := range s.exec {
@@ -138,7 +137,7 @@ func (s *BlockingSelector) next(ctx context.Context, now time.Time) []*executor.
 			execs = append(execs, e)
 		case shortest == 0, next < shortest:
 			shortest = next
-			execs = make([]*executor.Executable, 0, len(s.exec))
+			execs = make([]Executor, 0, len(s.exec))
 			execs = append(execs, e)
 		}
 	}
