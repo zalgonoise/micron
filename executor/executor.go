@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/zalgonoise/cfg"
+	"github.com/zalgonoise/micron/v3/schedule"
+	"github.com/zalgonoise/micron/v3/schedule/cronlex"
 	"github.com/zalgonoise/x/errs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -18,21 +20,27 @@ import (
 )
 
 const (
-	cronAndLocAlloc = 2
-	defaultID       = "micron.executor"
-	bufferPeriod    = 100 * time.Millisecond
+	defaultID    = "micron.executor"
+	bufferPeriod = 100 * time.Millisecond
 
 	errDomain = errs.Domain("micron/executor")
 
-	ErrEmpty = errs.Kind("empty")
+	ErrEmpty           = errs.Kind("empty")
+	ErrAlreadyExecuted = errs.Kind("already executed")
 
 	ErrRunnerList = errs.Entity("runners list")
 	ErrScheduler  = errs.Entity("scheduler")
+	ErrReboot     = errs.Entity("reboot")
+)
+
+const (
+	defaultTimeout = 10 * time.Minute
 )
 
 var (
-	ErrEmptyRunnerList = errs.WithDomain(errDomain, ErrEmpty, ErrRunnerList)
-	ErrEmptyScheduler  = errs.WithDomain(errDomain, ErrEmpty, ErrScheduler)
+	ErrEmptyRunnerList       = errs.WithDomain(errDomain, ErrEmpty, ErrRunnerList)
+	ErrEmptyScheduler        = errs.WithDomain(errDomain, ErrEmpty, ErrScheduler)
+	ErrAlreadyExecutedReboot = errs.WithDomain(errDomain, ErrAlreadyExecuted, ErrReboot)
 )
 
 // Scheduler describes the capabilities of a cron job scheduler. Its sole responsibility is to provide
@@ -106,14 +114,45 @@ type Executable struct {
 	id      string
 	cron    Scheduler
 	runners []Runner
+	timeout time.Duration
 
 	logger  *slog.Logger
 	metrics Metrics
 	tracer  trace.Tracer
 }
 
+func JoinSchedules(execs []*Executable) map[*cronlex.Schedule][]*Executable {
+	m := make(map[*cronlex.Schedule][]*Executable, len(execs))
+
+	for i := range execs {
+		if cronSchedule, ok := execs[i].cron.(*schedule.CronSchedule); ok && cronSchedule != nil {
+			if _, ok := m[cronSchedule.Schedule]; !ok {
+				m[cronSchedule.Schedule] = make([]*Executable, 0, len(execs))
+			}
+
+			m[cronSchedule.Schedule] = append(m[cronSchedule.Schedule], execs[i])
+		}
+	}
+
+	return m
+}
+
+func IsReboot(e *Executable) bool {
+	if e == nil {
+		return false
+	}
+
+	if e.cron == nil {
+		return false
+	}
+
+	_, ok := e.cron.(*schedule.RebootSchedule)
+
+	return ok
+}
+
 // Next calls the Executor's underlying schedule.Scheduler Next method.
-func (e *Executable) Next(ctx context.Context, now time.Time) time.Time {
+func (e *Executable) Next(ctx context.Context, now time.Time) time.Duration {
 	ctx, span := e.tracer.Start(ctx, "Executor.Next")
 	defer span.End()
 
@@ -131,7 +170,7 @@ func (e *Executable) Next(ctx context.Context, now time.Time) time.Time {
 		attribute.String("at", next.Format(time.RFC3339)),
 	)
 
-	return next
+	return next.Sub(now)
 }
 
 // Exec runs the task when on its scheduled time.
@@ -147,64 +186,66 @@ func (e *Executable) Exec(ctx context.Context, now time.Time) error {
 	e.metrics.IncExecutorExecCalls(ctx, e.id)
 	e.logger.InfoContext(ctx, "executing task", slog.String("id", e.id))
 
-	execCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	defer func() {
 		e.metrics.ObserveExecLatency(ctx, e.id, time.Since(now))
 	}()
 
-	next := e.cron.Next(execCtx, now)
+	// check for reboot executions
+	if rs, ok := e.cron.(*schedule.RebootSchedule); ok && rs.IsDone() {
+		return ErrAlreadyExecutedReboot
+	}
+
+	next := e.cron.Next(ctx, now)
+
 	timer := time.NewTimer(next.Sub(now))
 
-	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		err := ctx.Err()
 
-	for {
-		select {
-		case <-ctx.Done():
-			err := ctx.Err()
+		e.metrics.IncExecutorExecErrors(ctx, e.id)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		e.logger.WarnContext(ctx, "task cancelled",
+			slog.String("id", e.id),
+			slog.String("error", err.Error()),
+		)
 
-			e.metrics.IncExecutorExecErrors(ctx, e.id)
+		return err
+
+	case <-timer.C:
+		// avoid executing before it's time, as it may trigger repeated runs
+		if preTriggerDuration := time.Since(next); preTriggerDuration > 0 {
+			time.Sleep(preTriggerDuration + bufferPeriod)
+		}
+
+		runnerErrs := make([]error, 0, len(e.runners))
+
+		runCtx, runCancel := context.WithTimeout(ctx, e.timeout)
+		defer runCancel()
+
+		for i := range e.runners {
+			if err := e.runners[i].Run(runCtx); err != nil {
+				runnerErrs = append(runnerErrs, err)
+			}
+		}
+
+		if len(runnerErrs) > 0 {
+			err := errors.Join(runnerErrs...)
+
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			e.logger.WarnContext(ctx, "task cancelled",
+			e.metrics.IncExecutorExecErrors(ctx, e.id)
+			e.logger.ErrorContext(ctx, "task execution error(s)",
 				slog.String("id", e.id),
-				slog.String("error", err.Error()),
+				slog.Int("num_errors", len(runnerErrs)),
+				slog.String("errors", err.Error()),
 			)
 
 			return err
-
-		case <-timer.C:
-			// avoid executing before it's time, as it may trigger repeated runs
-			if preTriggerDuration := time.Since(next); preTriggerDuration > 0 {
-				time.Sleep(preTriggerDuration + bufferPeriod)
-			}
-
-			runnerErrs := make([]error, 0, len(e.runners))
-
-			for i := range e.runners {
-				if err := e.runners[i].Run(ctx); err != nil {
-					runnerErrs = append(runnerErrs, err)
-				}
-			}
-
-			if len(runnerErrs) > 0 {
-				err := errors.Join(runnerErrs...)
-
-				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-				e.metrics.IncExecutorExecErrors(ctx, e.id)
-				e.logger.ErrorContext(ctx, "task execution error(s)",
-					slog.String("id", e.id),
-					slog.Int("num_errors", len(runnerErrs)),
-					slog.String("errors", err.Error()),
-				)
-
-				return err
-			}
-
-			return nil
 		}
+
+		return nil
 	}
 }
 
@@ -275,7 +316,7 @@ func (e noOpExecutor) Exec(_ context.Context, _ time.Time) error {
 // Next calls the Executor's underlying schedule.Scheduler Next method.
 //
 // This is a no-op call, it has no effect and the returned time is always zero.
-func (e noOpExecutor) Next(_ context.Context, _ time.Time) (t time.Time) {
+func (e noOpExecutor) Next(_ context.Context, _ time.Time) (t time.Duration) {
 	return t
 }
 

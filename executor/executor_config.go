@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"log/slog"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 func defaultExecutable() *Executable {
 	return &Executable{
+		timeout: defaultTimeout,
 		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
 		tracer:  noop.NewTracerProvider().Tracer("micron.executor"),
@@ -50,6 +52,14 @@ func WithSchedule(cron string, loc *time.Location) cfg.Option[*Executable] {
 	}
 
 	s, err := cronlex.Parse(cron)
+	if errors.Is(err, cronlex.ErrRebootException) {
+		return cfg.Register(func(e *Executable) *Executable {
+			e.cron = schedule.NewRebootSchedule()
+
+			return e
+		})
+	}
+
 	if err != nil {
 		return cfg.NoOp[*Executable]{}
 	}
@@ -69,6 +79,18 @@ func WithSchedule(cron string, loc *time.Location) cfg.Option[*Executable] {
 
 	return cfg.Register(func(e *Executable) *Executable {
 		e.cron = scheduler
+
+		return e
+	})
+}
+
+func WithTimeout(dur time.Duration) cfg.Option[*Executable] {
+	if dur <= 0 {
+		dur = defaultTimeout
+	}
+
+	return cfg.Register(func(e *Executable) *Executable {
+		e.timeout = dur
 
 		return e
 	})

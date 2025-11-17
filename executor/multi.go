@@ -30,7 +30,7 @@ type Executor interface {
 	// of this call.
 	Exec(ctx context.Context, now time.Time) error
 	// Next calls the Executor's underlying schedule.Scheduler Next method.
-	Next(ctx context.Context, now time.Time) time.Time
+	Next(ctx context.Context, now time.Time) time.Duration
 	// ID returns this Executor's ID.
 	ID() string
 }
