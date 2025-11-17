@@ -2,10 +2,12 @@ package micron
 
 import (
 	"context"
+	"log/slog"
+	"time"
+
 	"github.com/zalgonoise/micron/v3/executor"
 	"github.com/zalgonoise/micron/v3/schedule"
 	"github.com/zalgonoise/micron/v3/selector"
-	"log/slog"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -100,11 +102,13 @@ func (r *Runtime) Run(ctx context.Context) {
 		span.AddEvent("closing runtime")
 	}()
 
+	ticker := time.NewTicker(100 * time.Millisecond)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 			if err := r.sel.Next(ctx); err != nil {
 				r.err <- err
 			}
@@ -175,8 +179,8 @@ func (noOpRuntime) Err() <-chan error {
 	return nil
 }
 
-func NewSelector(opts ...cfg.Option[*selector.Config]) (Selector, error) {
-	return selector.New(opts...)
+func NewSelector(ctx context.Context, opts ...cfg.Option[*selector.Config]) (Selector, error) {
+	return selector.New(ctx, opts...)
 }
 
 func NewBlockingSelector(opts ...cfg.Option[*selector.Config]) (Selector, error) {
