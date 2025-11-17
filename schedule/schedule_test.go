@@ -111,11 +111,18 @@ func TestCronSchedule_Next(t *testing.T) {
 			wants: time.Date(2023, 10, 30, 11, 0, 0, 0, time.UTC),
 		},
 		{
-			name: "Success/InvalidCronString",
+			name: "Error/InvalidCronString",
 			cron: "*",
 
 			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
 			err:   cronlex.ErrInvalidNodeType,
+		},
+		{
+			name: "Error/Reboot",
+			cron: "@reboot",
+
+			input: time.Date(2023, 10, 30, 10, 12, 43, 0, time.UTC),
+			err:   cronlex.ErrRebootException,
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
@@ -129,9 +136,7 @@ func TestCronSchedule_Next(t *testing.T) {
 			sched, err := New(
 				WithSchedule(schedule),
 				WithLocation(time.UTC),
-				WithLogHandler(log.NoOp()),
-				WithMetrics(metrics.NoOp()),
-				WithTrace(noop.NewTracerProvider().Tracer("test")),
+				WithObservability(metrics.NoOp(), slog.New(log.NoOp()), noop.NewTracerProvider().Tracer("test")),
 			)
 			if testcase.err != nil {
 				is.True(t, errors.Is(err, testcase.err))
@@ -155,7 +160,7 @@ func TestConfig(t *testing.T) {
 
 		_, err = New(
 			WithSchedule(schedule),
-			WithLogger(slog.New(log.NoOp())),
+			WithObservability(nil, slog.New(log.NoOp()), nil),
 		)
 
 		is.Empty(t, err)
@@ -165,10 +170,7 @@ func TestConfig(t *testing.T) {
 		_, err := New(
 			WithSchedule(nil),
 			WithLocation(nil),
-			WithLogger(nil),
-			WithLogHandler(nil),
-			WithMetrics(nil),
-			WithTrace(nil),
+			WithObservability(nil, nil, nil),
 		)
 
 		is.True(t, errors.Is(err, ErrEmptySchedule))

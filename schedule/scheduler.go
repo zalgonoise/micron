@@ -2,9 +2,11 @@ package schedule
 
 import (
 	"context"
-	"github.com/zalgonoise/x/errs"
 	"log/slog"
+	"sync/atomic"
 	"time"
+
+	"github.com/zalgonoise/x/errs"
 
 	"github.com/zalgonoise/cfg"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,7 +27,11 @@ const (
 
 var ErrEmptySchedule = errs.WithDomain(domainErr, ErrEmpty, ErrSchedule)
 
-const maxSec = 59
+const (
+	maxSec = 59
+
+	minStepDuration = 100 * time.Millisecond
+)
 
 //nolint:gochecknoglobals // immutable instance of resolve.FixedSchedule for a fixed seconds schedule
 var fixedSeconds = resolve.FixedSchedule{Max: maxSec, At: 0}
@@ -141,6 +147,48 @@ func New(options ...cfg.Option[*CronSchedule]) (*CronSchedule, error) {
 	}
 
 	return s, nil
+}
+
+type RebootSchedule struct {
+	isDone atomic.Bool
+
+	logger  *slog.Logger
+	metrics Metrics
+	tracer  trace.Tracer
+}
+
+func NewRebootSchedule(options ...cfg.Option[*RebootSchedule]) *RebootSchedule {
+	return cfg.Set(defaultRebootSchedule(), options...)
+}
+
+func (s *RebootSchedule) Next(ctx context.Context, t time.Time) time.Time {
+	ctx, span := s.tracer.Start(ctx, "RebootSchedule.Next")
+	defer span.End()
+
+	s.metrics.IncSchedulerNextCalls(ctx)
+
+	if s.isDone.Load() {
+		span.AddEvent("already executed reboot job")
+		s.logger.DebugContext(ctx, "already executed reboot job")
+
+		return time.Time{}
+	}
+
+	next := t.Add(time.Second)
+	defer func() {
+		time.Sleep(minStepDuration)
+
+		s.isDone.Store(true)
+	}()
+
+	span.SetAttributes(attribute.String("at", next.Format(time.RFC3339)))
+	s.logger.InfoContext(ctx, "next job", slog.Time("at", next))
+
+	return next
+}
+
+func (s *RebootSchedule) IsDone() bool {
+	return s.isDone.Load()
 }
 
 func NoOp() noOpScheduler {

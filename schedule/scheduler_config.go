@@ -15,10 +15,18 @@ import (
 
 func defaultSchedule() *CronSchedule {
 	return &CronSchedule{
-		Loc:     time.Local,
+		Loc:     time.UTC, // define UTC as standard default location
 		logger:  slog.New(log.NoOp()),
 		metrics: metrics.NoOp(),
-		tracer:  noop.NewTracerProvider().Tracer("scheduler's no-op tracer"),
+		tracer:  noop.NewTracerProvider().Tracer("micron.cron_schedule"),
+	}
+}
+
+func defaultRebootSchedule() *RebootSchedule {
+	return &RebootSchedule{
+		logger:  slog.New(log.NoOp()),
+		metrics: metrics.NoOp(),
+		tracer:  noop.NewTracerProvider().Tracer("micron.reboot_schedule"),
 	}
 }
 
@@ -52,52 +60,46 @@ func WithLocation(loc *time.Location) cfg.Option[*CronSchedule] {
 	})
 }
 
-// WithMetrics decorates the Scheduler with the input metrics registry.
-func WithMetrics(m Metrics) cfg.Option[*CronSchedule] {
+// WithObservability adds metrics, logs and / or tracing to the RebootSchedule.
+func WithObservability(m Metrics, logger *slog.Logger, tracer trace.Tracer) cfg.Option[*CronSchedule] {
 	if m == nil {
-		return cfg.NoOp[*CronSchedule]{}
+		m = metrics.NoOp()
+	}
+
+	if logger == nil {
+		logger = slog.New(log.NoOp())
+	}
+
+	if tracer == nil {
+		tracer = noop.NewTracerProvider().Tracer("micron.cron_schedule")
 	}
 
 	return cfg.Register(func(s *CronSchedule) *CronSchedule {
 		s.metrics = m
-
-		return s
-	})
-}
-
-// WithLogger decorates the Scheduler with the input logger.
-func WithLogger(logger *slog.Logger) cfg.Option[*CronSchedule] {
-	if logger == nil {
-		return cfg.NoOp[*CronSchedule]{}
-	}
-
-	return cfg.Register(func(s *CronSchedule) *CronSchedule {
 		s.logger = logger
+		s.tracer = tracer
 
 		return s
 	})
 }
 
-// WithLogHandler decorates the Scheduler with logging using the input log handler.
-func WithLogHandler(handler slog.Handler) cfg.Option[*CronSchedule] {
-	if handler == nil {
-		return cfg.NoOp[*CronSchedule]{}
+// WithRebootObservability adds metrics, logs and / or tracing to the RebootSchedule.
+func WithRebootObservability(m Metrics, logger *slog.Logger, tracer trace.Tracer) cfg.Option[*RebootSchedule] {
+	if m == nil {
+		m = metrics.NoOp()
 	}
 
-	return cfg.Register(func(s *CronSchedule) *CronSchedule {
-		s.logger = slog.New(handler)
+	if logger == nil {
+		logger = slog.New(log.NoOp())
+	}
 
-		return s
-	})
-}
-
-// WithTrace decorates the Scheduler with the input trace.Tracer.
-func WithTrace(tracer trace.Tracer) cfg.Option[*CronSchedule] {
 	if tracer == nil {
-		return cfg.NoOp[*CronSchedule]{}
+		tracer = noop.NewTracerProvider().Tracer("micron.reboot_schedule")
 	}
 
-	return cfg.Register(func(s *CronSchedule) *CronSchedule {
+	return cfg.Register(func(s *RebootSchedule) *RebootSchedule {
+		s.metrics = m
+		s.logger = logger
 		s.tracer = tracer
 
 		return s
