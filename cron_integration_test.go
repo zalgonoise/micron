@@ -119,7 +119,7 @@ func TestCron(t *testing.T) {
 				n++
 			}
 
-			sel, err := selector.New(
+			sel, err := selector.New(context.Background(),
 				selector.WithExecutors(execs...),
 				selector.WithLogger(logger),
 			)
@@ -189,7 +189,7 @@ func TestFillErrorBuffer(t *testing.T) {
 	)
 	is.Empty(t, err)
 
-	sel, err := micron.NewSelector(
+	sel, err := micron.NewSelector(context.Background(),
 		selector.WithExecutors(exec),
 		selector.WithLogHandler(h),
 	)
