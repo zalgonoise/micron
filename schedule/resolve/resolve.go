@@ -1,5 +1,42 @@
 package resolve
 
+import (
+	"slices"
+)
+
+func EqualResolver(a, b interface {
+	Resolve(int) int
+}) bool {
+	switch resolver := a.(type) {
+	case Everytime:
+		if r, ok := b.(Everytime); ok {
+			return EqualEverytime(resolver, r)
+		}
+
+		return false
+	case FixedSchedule:
+		if r, ok := b.(FixedSchedule); ok {
+			return EqualFixedSchedule(resolver, r)
+		}
+
+		return false
+	case RangeSchedule:
+		if r, ok := b.(RangeSchedule); ok {
+			return EqualRangeSchedule(resolver, r)
+		}
+
+		return false
+	case StepSchedule:
+		if r, ok := b.(StepSchedule); ok {
+			return EqualStepSchedule(resolver, r)
+		}
+
+		return false
+	default:
+		return false
+	}
+}
+
 // Everytime always resolves to zero, as a constantly occurring resolver.
 type Everytime struct{}
 
@@ -7,6 +44,8 @@ type Everytime struct{}
 func (s Everytime) Resolve(_ int) int {
 	return 0
 }
+
+func EqualEverytime(_, _ Everytime) bool { return true }
 
 // FixedSchedule resolves on a specific value, described as At. It also stores Max to delimit the maximum range for
 // this resolver.
@@ -18,6 +57,11 @@ type FixedSchedule struct {
 // Resolve returns the distance to the next occurrence, as unit values.
 func (s FixedSchedule) Resolve(value int) int {
 	return diff(value, s.At, s.At, s.Max)
+}
+
+func EqualFixedSchedule(a, b FixedSchedule) bool {
+	return a.Max == b.Max &&
+		a.At == b.At
 }
 
 // RangeSchedule resolves on every value between From and To. It also stores Max to delimit the maximum range for
@@ -35,6 +79,12 @@ func (s RangeSchedule) Resolve(value int) int {
 	}
 
 	return diff(value, s.From, s.To, s.Max)
+}
+
+func EqualRangeSchedule(a, b RangeSchedule) bool {
+	return a.Max == b.Max &&
+		a.From == b.From &&
+		a.To == b.Max
 }
 
 // StepSchedule resolves on specific values listed in Steps. It also stores Max to delimit the maximum range for
@@ -61,6 +111,11 @@ func (s StepSchedule) Resolve(value int) int {
 	}
 
 	return offset
+}
+
+func EqualStepSchedule(a, b StepSchedule) bool {
+	return a.Max == b.Max &&
+		slices.Equal(a.Steps, b.Steps)
 }
 
 func diff(value, from, to, maximum int) int {
